@@ -1,0 +1,6 @@
+{
+    "Configuration" : {
+        "ConnectionString" : "<ConnectionString placeholder>",
+        "AgentId" : "<AgentId placeholder>"
+    }
+}

@@ -1,0 +1,48 @@
+FROM i386/debian:latest as builder_base
+
+#Install necessary os packages for building the agent
+RUN rm -rf /var/lib/apt/lists/*
+RUN apt-get clean -y && apt-get update -y && apt-get install -y \
+  cmake \
+  libaudit-dev \
+  libauparse-dev \
+  moreutils \
+  build-essential \
+  libssl-dev \
+  uuid-dev \
+  iptables-dev \
+  valgrind \
+  libcurl4-openssl-dev
+
+# Create Image with the source code to build the agent
+FROM builder_base as code_base
+RUN mkdir /source_code
+COPY azure-iot-sdk-c/ /source_code/azure-iot-sdk-c
+COPY umock-c/ /source_code/umock-c
+COPY CMakeLists.txt /source_code/CMakeLists.txt
+COPY cmake_config/ /source_code/cmake_config
+COPY installation/ /source_code/installation
+COPY build/ /source_code/build
+COPY tests/ /source_code/tests
+COPY agent/ /source_code/agent
+
+RUN /bin/bash /source_code/build/build.sh --valgrind --unit-tests
+
+# run the unit tests one clean machine
+FROM i386/debian:latest as test
+RUN apt-get clean -y && apt-get update -y && apt-get install -y cmake valgrind 
+
+COPY --from=code_base /source_code/cmake/agent_linux/ /source_code/cmake/agent_linux
+
+COPY --from=code_base /source_code/build/run_all_tests.sh /source_code/build/run_all_tests.sh
+# RUN cd /opt/build; /bin/bash /opt/build/run_all_tests.sh
+RUN cd /source_code/cmake/agent_linux; ctest
+
+# install the agnet on clean debian
+FROM i386/debian:latest
+RUN apt-get clean -y && apt-get update -y && apt-get install -y dos2unix
+COPY --from=code_base /source_code/cmake/agent_linux/agent/install /tmp/agent_linux/install
+# TODO: preper the VM for agent installation.
+#       setup new device - and install OMS and the other services and dependencies.
+# CMD /bin/bash /tmp/agent_linux/install/InstallAgent.sh
+

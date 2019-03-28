@@ -1,0 +1,7 @@
+{
+    "Configuration" : {
+        "ConnectionString" : "ConnctionStringStub",
+        "AgentId" : "7aaeef0e-614f-4ff2-97d2-1442186f73fa",
+        "TriggerdEventsInterval" : "PT1S"
+    }
+}
