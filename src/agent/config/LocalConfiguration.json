@@ -1,0 +1,13 @@
+{
+    "Configuration" : {
+        "AgentId" : "",
+        "TriggerdEventsInterval" : "PT2M",
+        "Authentication" : {
+            "Identity" : "",
+            "AuthenticationMethod" : "",
+            "FilePath" : "",
+            "DeviceId" : "",
+            "HostName" : ""
+        }
+    }
+}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Azure Security Center for IoT Agent
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+StartLimitInterval=0
+RemainAfterExit=no
+ExecStart={DIRECTORY}/{EXE}
+WorkingDirectory={DIRECTORY}
+User={USER}
+Group={GROUP}
+
+[Install]
+WantedBy=default.target

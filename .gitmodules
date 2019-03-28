@@ -1,0 +1,7 @@
+[submodule "azure-iot-sdk-c"]
+	path = src/azure-iot-sdk-c
+	url = https://github.com/Azure/azure-iot-sdk-c.git
+	branch = public-preview
+[submodule "umock-c"]
+	path = src/umock-c
+	url = https://github.com/Azure/umock-c.git

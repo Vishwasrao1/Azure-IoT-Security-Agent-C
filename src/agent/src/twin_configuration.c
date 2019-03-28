@@ -1,0 +1,392 @@
+// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+#include "twin_configuration.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "azure_c_shared_utility/lock.h"
+
+#include "internal/time_utils.h"
+#include "internal/time_utils_consts.h"
+#include "json/json_object_reader.h"
+#include "local_config.h"
+#include "logger.h"
+#include "twin_configuration_event_priorities.h"
+#include "utils.h"
+
+/**
+ * Agent's twin configurtaion 
+ */
+typedef struct _TwinConfiguration {
+    uint32_t maxLocalCacheSize;
+    uint32_t maxMessageSize;
+    uint32_t lowPriorityMessageFrequency;
+    uint32_t highPriorityMessageFrequency;
+    uint32_t snapshotFrequency;
+
+    LOCK_HANDLE lock;
+} TwinConfiguration;
+
+static TwinConfiguration twinConfiguration;
+static TwinConfigurationUpdateResult updateResult;
+
+/**
+ * @brief   extracts the twin configuration from the json object and initializes\updates the static
+ *          twin configuration accordingly, will replace with local configuration values in case the 
+ *          field is missing from the json.
+ * 
+ * @param   jsonReader  The json reader to read the configuration with.
+ * 
+ * @return  TWIN_OK             on success or an error code upon failure
+ */
+static TwinConfigurationResult TwinConfiguration_ExtractConfiguration(JsonObjectReaderHandle jsonReader, TwinConfigurationBundleStatus* status, TwinConfiguration* newConfiguration);
+
+/**
+ * @brief   retrieves the value of a given twin configuration in a thread safe manner (currently using a lock)
+ * 
+ * @param   value       out param: the parsed value
+ * @param   field       field taken from the twin
+ * 
+ * @return  TWIN_OK     on success or an error code upon failure
+ */
+static TwinConfigurationResult TwinConfiguration_GetFieldInteger(uint32_t* value, uint32_t field);
+
+/**
+ * @brief Updates the events priorites.
+ * 
+ * @param   jsonReader  The json reader to read the configuration with.
+ * 
+ * @return TWIN_OK on success or an error code upon failure
+ */
+static TwinConfigurationResult TwinConfiguration_UpdateEventPriorities(JsonObjectReaderHandle jsonReader);
+
+TwinConfigurationResult TwinConfiguration_Init() {
+
+    twinConfiguration.lock = Lock_Init();
+    if (twinConfiguration.lock == NULL) {
+        return TWIN_LOCK_EXCEPTION;
+    }
+
+    twinConfiguration.maxLocalCacheSize = DEFAULT_MAX_LOCAL_CACHE_SIZE;
+    twinConfiguration.maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
+    twinConfiguration.lowPriorityMessageFrequency = DEFAULT_LOW_PRIORITY_MESSAGE_FREQUENCY;
+    twinConfiguration.highPriorityMessageFrequency = DEFAULT_HIGH_PRIORITY_MESSAGE_FREQUENCY;
+    twinConfiguration.snapshotFrequency = DEFAULT_SNAPSHOT_FREQUENCY;
+
+    TwinConfigurationResult twinResult = TwinConfigurationEventPriorities_Init();
+    
+    if (twinResult != TWIN_OK) {
+        Lock_Deinit(twinConfiguration.lock);
+        twinConfiguration.lock = NULL;
+        return twinResult;
+    }
+
+    return TWIN_OK;
+}
+
+void TwinConfiguration_Deinit() {
+    
+    TwinConfigurationEventPriorities_Deinit();
+
+    if (twinConfiguration.lock != NULL) {
+        Lock_Deinit(twinConfiguration.lock);
+        twinConfiguration.lock = NULL;
+    }
+}
+
+TwinConfigurationResult TwinConfiguration_Update(const char* json, bool complete) {
+    bool isLocked = false;
+    TwinConfigurationBundleStatus newBundleStatus = { 0 };
+    TwinConfiguration newConfiguration = { 0 };
+    TwinConfigurationResult returnValue = TWIN_OK;
+    JsonObjectReaderHandle jsonReader = NULL;
+
+    JsonReaderResult result = JsonObjectReader_InitFromString(&jsonReader, json);
+    if (result == JSON_READER_EXCEPTION) {
+        returnValue = TWIN_EXCEPTION;
+        goto cleanup;
+    } else if (result != JSON_READER_OK) {
+        returnValue = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+    
+    if (complete) {
+        if (JsonObjectReader_StepIn(jsonReader, "desired") != JSON_READER_OK) {
+            returnValue = TWIN_PARSE_EXCEPTION;
+            goto cleanup;
+        }
+    }
+
+    if (JsonObjectReader_StepIn(jsonReader, AGENT_CONFIGURATION_KEY) != JSON_READER_OK) {
+        returnValue = TWIN_PARSE_EXCEPTION;
+        goto cleanup;
+    }
+
+    returnValue = TwinConfiguration_ExtractConfiguration(jsonReader, &newBundleStatus, &newConfiguration);
+    if (returnValue != TWIN_OK){
+        goto cleanup;
+    }
+
+    if (Lock(twinConfiguration.lock) == LOCK_OK) {
+        isLocked = true;
+    } else  {
+        returnValue = TWIN_LOCK_EXCEPTION;
+        goto cleanup;
+    }
+   
+    returnValue = TwinConfiguration_UpdateEventPriorities(jsonReader);
+    if (returnValue == TWIN_PARSE_EXCEPTION) {
+        newBundleStatus.eventPriorities = CONFIGURATION_TYPE_MISMATCH;
+        goto cleanup;
+    } else if (returnValue != TWIN_OK){
+        goto cleanup;
+    }
+    
+    newConfiguration.lock = twinConfiguration.lock;
+    memcpy(&twinConfiguration, &newConfiguration, sizeof(TwinConfiguration));
+    
+cleanup:
+    memcpy(&updateResult.configurationBundleStatus, &newBundleStatus, sizeof(TwinConfigurationBundleStatus));
+    updateResult.lastUpdateResult = returnValue;
+    updateResult.lastUpdateTime = TimeUtils_GetCurrentTime();
+
+    if (jsonReader != NULL) {
+        JsonObjectReader_Deinit(jsonReader);
+    }
+
+    if (isLocked && Unlock(twinConfiguration.lock) != LOCK_OK) {
+        return TWIN_LOCK_EXCEPTION;
+    }
+
+    return returnValue;
+}
+
+TwinConfigurationResult TwinConfiguration_GetMaxLocalCacheSize(uint32_t* maxLocalCacheSize) {
+    return TwinConfiguration_GetFieldInteger(maxLocalCacheSize, twinConfiguration.maxLocalCacheSize);
+}
+
+TwinConfigurationResult TwinConfiguration_GetMaxMessageSize(uint32_t* maxMessageSize) {
+    return TwinConfiguration_GetFieldInteger(maxMessageSize, twinConfiguration.maxMessageSize);
+}
+
+TwinConfigurationResult TwinConfiguration_GetLowPriorityMessageFrequency(uint32_t* lowPriorityMessageFrequency) {
+    return TwinConfiguration_GetFieldInteger(lowPriorityMessageFrequency, twinConfiguration.lowPriorityMessageFrequency);
+}
+
+TwinConfigurationResult TwinConfiguration_GetHighPriorityMessageFrequency(uint32_t* highPriorityMessageFrequency) {
+    return TwinConfiguration_GetFieldInteger(highPriorityMessageFrequency, twinConfiguration.highPriorityMessageFrequency);
+}
+
+TwinConfigurationResult TwinConfiguration_GetSnapshotFrequency(uint32_t* snapshotFrequency) {
+    return TwinConfiguration_GetFieldInteger(snapshotFrequency, twinConfiguration.snapshotFrequency);
+}
+
+static TwinConfigurationResult TwinConfiguration_UpdateEventPriorities(JsonObjectReaderHandle jsonReader) {
+    TwinConfigurationResult twinResult = TWIN_OK;
+
+    JsonObjectReaderHandle propertiesReader = NULL;
+    JsonReaderResult result = JsonObjectReader_ReadObject(jsonReader, EVENT_PROPERTIES_KEY, &propertiesReader);
+    if (result == JSON_READER_OK) {
+        twinResult = TwinConfigurationEventPriorities_Update(propertiesReader);
+        if (twinResult != TWIN_OK) {
+            goto cleanup;
+        }
+    } else if (result == JSON_READER_PARSE_ERROR) {
+        twinResult = TWIN_PARSE_EXCEPTION;
+        goto cleanup;
+    } else if (result != JSON_READER_OK && result != JSON_READER_KEY_MISSING) {
+        twinResult = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+cleanup:
+    if (propertiesReader != NULL) {
+        JsonObjectReader_Deinit(propertiesReader);
+    }
+    return twinResult;
+}
+
+static TwinConfigurationResult TwinConfiguration_SetSingleUintValueFromJsonOrDefault(uint32_t* value, uint32_t defaultValue, JsonObjectReaderHandle reader, const char* key, bool isTime, TwinConfigurationStatus* outStatus) {
+    *outStatus = CONFIGURATION_OK;
+    TwinConfigurationResult result = TWIN_OK;
+    JsonReaderResult currentKeyResult;
+
+    if (isTime){
+        currentKeyResult = JsonObjectReader_ReadTimeInMilliseconds(reader, key, value);
+    } else {
+        currentKeyResult = JsonObjectReader_ReadInt(reader, key, (int32_t*)value);
+    } 
+    
+    if (currentKeyResult == JSON_READER_KEY_MISSING) {
+        *value = defaultValue;
+    } else if (currentKeyResult == JSON_READER_PARSE_ERROR) {
+        result = TWIN_PARSE_EXCEPTION;
+        *outStatus = CONFIGURATION_TYPE_MISMATCH;
+    } else if (currentKeyResult != JSON_READER_OK) {
+        result = TWIN_EXCEPTION;
+    }    
+
+    return result;
+}
+
+static TwinConfigurationResult TwinConfiguration_ExtractConfiguration(JsonObjectReaderHandle jsonReader, TwinConfigurationBundleStatus* parsingResult, TwinConfiguration* newConfiguration) {  
+    TwinConfigurationResult result = TWIN_OK;
+    TwinConfigurationResult currentKeyResult;
+
+    currentKeyResult = TwinConfiguration_SetSingleUintValueFromJsonOrDefault(&(newConfiguration->maxLocalCacheSize), DEFAULT_MAX_LOCAL_CACHE_SIZE, jsonReader, MAX_LOCAL_CACHE_SIZE_KEY, false, &(parsingResult->maxLocalCacheSize));
+    if (currentKeyResult == TWIN_PARSE_EXCEPTION) {
+        result = currentKeyResult;
+    } else if (currentKeyResult != TWIN_OK) {
+        result = currentKeyResult;
+        goto cleanup;
+    }
+
+    currentKeyResult = TwinConfiguration_SetSingleUintValueFromJsonOrDefault(&(newConfiguration->maxMessageSize), DEFAULT_MAX_MESSAGE_SIZE, jsonReader, MAX_MESSAGE_SIZE_KEY, false, &(parsingResult->maxMessageSize));
+    if (currentKeyResult == TWIN_PARSE_EXCEPTION) {
+        result = currentKeyResult;
+    } else if (currentKeyResult != TWIN_OK) {
+        result = currentKeyResult;
+        goto cleanup;
+    }
+
+    currentKeyResult = TwinConfiguration_SetSingleUintValueFromJsonOrDefault(&(newConfiguration->highPriorityMessageFrequency), DEFAULT_HIGH_PRIORITY_MESSAGE_FREQUENCY, jsonReader, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, true, &(parsingResult->highPriorityMessageFrequency));
+    if (currentKeyResult == TWIN_PARSE_EXCEPTION) {
+        result = currentKeyResult;
+    } else if (currentKeyResult != TWIN_OK) {
+        result = currentKeyResult;
+        goto cleanup;
+    }
+
+    currentKeyResult = TwinConfiguration_SetSingleUintValueFromJsonOrDefault(&(newConfiguration->lowPriorityMessageFrequency), DEFAULT_LOW_PRIORITY_MESSAGE_FREQUENCY, jsonReader, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, true, &(parsingResult->lowPriorityMessageFrequency));
+    if (currentKeyResult == TWIN_PARSE_EXCEPTION) {
+        result = currentKeyResult;
+    } else if (currentKeyResult != TWIN_OK) {
+        result = currentKeyResult;
+        goto cleanup;
+    }
+
+    currentKeyResult = TwinConfiguration_SetSingleUintValueFromJsonOrDefault(&(newConfiguration->snapshotFrequency), DEFAULT_SNAPSHOT_FREQUENCY, jsonReader, SNAPSHOT_FREQUENCY_KEY, true, &(parsingResult->snapshotFrequency));
+    if (currentKeyResult == TWIN_PARSE_EXCEPTION) {
+        result = currentKeyResult;
+    } else if (currentKeyResult != TWIN_OK) {
+        result = currentKeyResult;
+        goto cleanup;
+    }
+
+cleanup:
+    return result;
+}
+
+static TwinConfigurationResult TwinConfiguration_GetFieldInteger(uint32_t* value, uint32_t field) {
+    if (Lock(twinConfiguration.lock) != LOCK_OK) {
+        return TWIN_LOCK_EXCEPTION;
+    }
+
+    *value = field;
+
+    if (Unlock(twinConfiguration.lock) != LOCK_OK) {
+        return TWIN_LOCK_EXCEPTION;
+    }
+
+    return TWIN_OK;
+}
+
+void TwinConfiguration_GetLastTwinUpdateData(TwinConfigurationUpdateResult* outResult) {
+    if (outResult == NULL) {
+        return;
+    }
+
+    outResult->lastUpdateResult = updateResult.lastUpdateResult;
+    outResult->lastUpdateTime = updateResult.lastUpdateTime;
+    memcpy(&(outResult->configurationBundleStatus), &updateResult.configurationBundleStatus, sizeof(TwinConfigurationBundleStatus));
+}
+
+TwinConfigurationResult TwinConfiguration_GetSerializetTwinConfiguration(char** twin, uint32_t* size){
+    TwinConfigurationResult result = TWIN_OK;
+    JsonObjectWriterHandle twinObject = NULL;
+    JsonObjectWriterHandle eventPriorities = NULL;
+
+    if (Lock(twinConfiguration.lock) != LOCK_OK) {
+        return TWIN_LOCK_EXCEPTION;
+    }
+
+    if (JsonObjectWriter_Init(&twinObject) != JSON_WRITER_OK) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+    if (JsonObjectWriter_WriteInt(twinObject, MAX_LOCAL_CACHE_SIZE_KEY, twinConfiguration.maxLocalCacheSize) != JSON_WRITER_OK) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+    if (JsonObjectWriter_WriteInt(twinObject, MAX_MESSAGE_SIZE_KEY, twinConfiguration.maxMessageSize) != JSON_WRITER_OK) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+    char timeSpan[DURATION_MAX_LENGTH] = { '\0' };
+    if (TimeUtils_MillisecondsToISO8601DurationString(twinConfiguration.highPriorityMessageFrequency, timeSpan, sizeof(timeSpan)) == false) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+    if (JsonObjectWriter_WriteString(twinObject, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, timeSpan) != JSON_WRITER_OK) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+    if (TimeUtils_MillisecondsToISO8601DurationString(twinConfiguration.lowPriorityMessageFrequency, timeSpan, sizeof(timeSpan)) == false) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+    if (JsonObjectWriter_WriteString(twinObject, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, timeSpan) != JSON_WRITER_OK) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+    if (TimeUtils_MillisecondsToISO8601DurationString(twinConfiguration.snapshotFrequency, timeSpan, sizeof(timeSpan)) == false) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+    if (JsonObjectWriter_WriteString(twinObject, SNAPSHOT_FREQUENCY_KEY, timeSpan) != JSON_WRITER_OK) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+    if (JsonObjectWriter_Init(&eventPriorities) != JSON_WRITER_OK) {
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+    result = TwinConfigurationEventPriorities_GetPrioritiesJson(eventPriorities);
+    if (result != TWIN_OK){
+        goto cleanup;
+    }
+
+    if (JsonObjectWriter_WriteObject(twinObject, EVENT_PROPERTIES_KEY, eventPriorities) != JSON_WRITER_OK){
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+    if (JsonObjectWriter_Serialize(twinObject, twin, size) != JSON_WRITER_OK){
+        result = TWIN_EXCEPTION;
+        goto cleanup;
+    }
+
+cleanup:
+    if (Unlock(twinConfiguration.lock) != LOCK_OK) {
+        return TWIN_LOCK_EXCEPTION;
+    }
+
+    if (eventPriorities != NULL) {
+        JsonObjectWriter_Deinit(eventPriorities);
+    }
+
+    if (twinObject != NULL) {
+        JsonObjectWriter_Deinit(twinObject);
+    }
+
+    return result;
+}
