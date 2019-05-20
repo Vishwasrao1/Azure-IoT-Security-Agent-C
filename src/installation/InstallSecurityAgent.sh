@@ -20,7 +20,7 @@ _hostName=
 
 usage()
 {
-    echo "usage: InstallAgent [[-aui <authentication identity> ] [[-aum <authentication method> ] [[-f <file path> ] [[-hn <host name> ] [[-di <device id> ] [-i | -u] | [-h]]"
+    echo "usage: InstallSecurityAgent [[-aui <authentication identity> ] [[-aum <authentication method> ] [[-f <file path> ] [[-hn <host name> ] [[-di <device id> ] [-i | -u] | [-h]]"
 }
 
 wgetAndExitOnFail(){
