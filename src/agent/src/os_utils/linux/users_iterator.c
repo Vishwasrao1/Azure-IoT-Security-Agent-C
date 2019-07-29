@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include "os_utils/users_iterator.h"
+#include "utils.h"
 
 #include <errno.h>
 #include <pwd.h>
@@ -53,9 +54,13 @@ const char* UsersIterator_GetUsername(UsersIteratorHandle iterator) {
     return iteratorObj->currentUser->pw_name;
 }
 
-int32_t UsersIterator_GetUserId(UsersIteratorHandle iterator) {
+UserIteratorResults UsersIterator_GetUserId(UsersIteratorHandle iterator, char* outBuffer, int32_t *outBufferSize) {
     UsersIterator* iteratorObj = (UsersIterator*)iterator;
-    return iteratorObj->currentUser->pw_uid;
+
+    if(Utils_IntegerToString(iteratorObj->currentUser->pw_uid, outBuffer, outBufferSize))
+        return USER_ITERATOR_OK;
+    else
+        return USER_ITERATOR_EXCEPTION;
 }
 
 UserIteratorResults UsersIterator_CreateGroupsIterator(UsersIteratorHandle iterator, GroupsIteratorHandle* groupsIterator) {

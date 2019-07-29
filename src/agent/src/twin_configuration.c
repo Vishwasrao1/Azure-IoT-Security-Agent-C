@@ -13,7 +13,8 @@
 #include "json/json_object_reader.h"
 #include "local_config.h"
 #include "logger.h"
-#include "twin_configuration_event_priorities.h"
+#include "twin_configuration_event_collectors.h"
+#include "twin_configuration_utils.h"
 #include "utils.h"
 
 /**
@@ -28,6 +29,8 @@ typedef struct _TwinConfiguration {
 
     LOCK_HANDLE lock;
 } TwinConfiguration;
+
+static const char* twinConfigurationObjectName = NULL;
 
 static TwinConfiguration twinConfiguration;
 static TwinConfigurationUpdateResult updateResult;
@@ -53,15 +56,6 @@ static TwinConfigurationResult TwinConfiguration_ExtractConfiguration(JsonObject
  */
 static TwinConfigurationResult TwinConfiguration_GetFieldInteger(uint32_t* value, uint32_t field);
 
-/**
- * @brief Updates the events priorites.
- * 
- * @param   jsonReader  The json reader to read the configuration with.
- * 
- * @return TWIN_OK on success or an error code upon failure
- */
-static TwinConfigurationResult TwinConfiguration_UpdateEventPriorities(JsonObjectReaderHandle jsonReader);
-
 TwinConfigurationResult TwinConfiguration_Init() {
 
     twinConfiguration.lock = Lock_Init();
@@ -75,7 +69,9 @@ TwinConfigurationResult TwinConfiguration_Init() {
     twinConfiguration.highPriorityMessageFrequency = DEFAULT_HIGH_PRIORITY_MESSAGE_FREQUENCY;
     twinConfiguration.snapshotFrequency = DEFAULT_SNAPSHOT_FREQUENCY;
 
-    TwinConfigurationResult twinResult = TwinConfigurationEventPriorities_Init();
+    twinConfigurationObjectName = LocalConfiguration_GetRemoteConfigurationObjectName();
+
+    TwinConfigurationResult twinResult = TwinConfigurationEventCollectors_Init();
     
     if (twinResult != TWIN_OK) {
         Lock_Deinit(twinConfiguration.lock);
@@ -88,7 +84,7 @@ TwinConfigurationResult TwinConfiguration_Init() {
 
 void TwinConfiguration_Deinit() {
     
-    TwinConfigurationEventPriorities_Deinit();
+    TwinConfigurationEventCollectors_Deinit();
 
     if (twinConfiguration.lock != NULL) {
         Lock_Deinit(twinConfiguration.lock);
@@ -104,10 +100,7 @@ TwinConfigurationResult TwinConfiguration_Update(const char* json, bool complete
     JsonObjectReaderHandle jsonReader = NULL;
 
     JsonReaderResult result = JsonObjectReader_InitFromString(&jsonReader, json);
-    if (result == JSON_READER_EXCEPTION) {
-        returnValue = TWIN_EXCEPTION;
-        goto cleanup;
-    } else if (result != JSON_READER_OK) {
+    if (result != JSON_READER_OK) {
         returnValue = TWIN_EXCEPTION;
         goto cleanup;
     }
@@ -119,7 +112,14 @@ TwinConfigurationResult TwinConfiguration_Update(const char* json, bool complete
         }
     }
 
-    if (JsonObjectReader_StepIn(jsonReader, AGENT_CONFIGURATION_KEY) != JSON_READER_OK) {
+    result = JsonObjectReader_StepIn(jsonReader, twinConfigurationObjectName); 
+    if (result == JSON_READER_KEY_MISSING || result == JSON_READER_VALUE_IS_NULL) {
+        JsonObjectReader_Deinit(jsonReader);
+        if (JsonObjectReader_InitFromString(&jsonReader, "{}") != JSON_READER_OK) {
+            returnValue = TWIN_EXCEPTION;
+            goto cleanup;
+        }
+    } else if (result != JSON_READER_OK) {
         returnValue = TWIN_PARSE_EXCEPTION;
         goto cleanup;
     }
@@ -136,7 +136,7 @@ TwinConfigurationResult TwinConfiguration_Update(const char* json, bool complete
         goto cleanup;
     }
    
-    returnValue = TwinConfiguration_UpdateEventPriorities(jsonReader);
+    returnValue = TwinConfigurationEventCollectors_Update(jsonReader);
     if (returnValue == TWIN_PARSE_EXCEPTION) {
         newBundleStatus.eventPriorities = CONFIGURATION_TYPE_MISMATCH;
         goto cleanup;
@@ -183,50 +183,22 @@ TwinConfigurationResult TwinConfiguration_GetSnapshotFrequency(uint32_t* snapsho
     return TwinConfiguration_GetFieldInteger(snapshotFrequency, twinConfiguration.snapshotFrequency);
 }
 
-static TwinConfigurationResult TwinConfiguration_UpdateEventPriorities(JsonObjectReaderHandle jsonReader) {
-    TwinConfigurationResult twinResult = TWIN_OK;
-
-    JsonObjectReaderHandle propertiesReader = NULL;
-    JsonReaderResult result = JsonObjectReader_ReadObject(jsonReader, EVENT_PROPERTIES_KEY, &propertiesReader);
-    if (result == JSON_READER_OK) {
-        twinResult = TwinConfigurationEventPriorities_Update(propertiesReader);
-        if (twinResult != TWIN_OK) {
-            goto cleanup;
-        }
-    } else if (result == JSON_READER_PARSE_ERROR) {
-        twinResult = TWIN_PARSE_EXCEPTION;
-        goto cleanup;
-    } else if (result != JSON_READER_OK && result != JSON_READER_KEY_MISSING) {
-        twinResult = TWIN_EXCEPTION;
-        goto cleanup;
-    }
-
-cleanup:
-    if (propertiesReader != NULL) {
-        JsonObjectReader_Deinit(propertiesReader);
-    }
-    return twinResult;
-}
-
 static TwinConfigurationResult TwinConfiguration_SetSingleUintValueFromJsonOrDefault(uint32_t* value, uint32_t defaultValue, JsonObjectReaderHandle reader, const char* key, bool isTime, TwinConfigurationStatus* outStatus) {
     *outStatus = CONFIGURATION_OK;
-    TwinConfigurationResult result = TWIN_OK;
-    JsonReaderResult currentKeyResult;
+    TwinConfigurationResult result;
 
     if (isTime){
-        currentKeyResult = JsonObjectReader_ReadTimeInMilliseconds(reader, key, value);
+        result = TwinConfigurationUtils_GetConfigurationTimeValueFromJson(reader, key, value);
     } else {
-        currentKeyResult = JsonObjectReader_ReadInt(reader, key, (int32_t*)value);
+        result = TwinConfigurationUtils_GetConfigurationUintValueFromJson(reader, key, value);
     } 
     
-    if (currentKeyResult == JSON_READER_KEY_MISSING) {
+    if (result == TWIN_CONF_NOT_EXIST) {
         *value = defaultValue;
-    } else if (currentKeyResult == JSON_READER_PARSE_ERROR) {
-        result = TWIN_PARSE_EXCEPTION;
+        result = TWIN_OK;
+    } else if (result == TWIN_PARSE_EXCEPTION) {
         *outStatus = CONFIGURATION_TYPE_MISMATCH;
-    } else if (currentKeyResult != JSON_READER_OK) {
-        result = TWIN_EXCEPTION;
-    }    
+    } 
 
     return result;
 }
@@ -303,27 +275,32 @@ void TwinConfiguration_GetLastTwinUpdateData(TwinConfigurationUpdateResult* outR
     memcpy(&(outResult->configurationBundleStatus), &updateResult.configurationBundleStatus, sizeof(TwinConfigurationBundleStatus));
 }
 
-TwinConfigurationResult TwinConfiguration_GetSerializetTwinConfiguration(char** twin, uint32_t* size){
+TwinConfigurationResult TwinConfiguration_GetSerializedTwinConfiguration(char** twin, uint32_t* size){
     TwinConfigurationResult result = TWIN_OK;
-    JsonObjectWriterHandle twinObject = NULL;
-    JsonObjectWriterHandle eventPriorities = NULL;
+    JsonObjectWriterHandle configurationObject = NULL;
+    JsonObjectWriterHandle twinRoot = NULL;
 
     if (Lock(twinConfiguration.lock) != LOCK_OK) {
         return TWIN_LOCK_EXCEPTION;
     }
-
-    if (JsonObjectWriter_Init(&twinObject) != JSON_WRITER_OK) {
+    
+    if (JsonObjectWriter_Init(&twinRoot) != JSON_WRITER_OK) {
         result = TWIN_EXCEPTION;
         goto cleanup;
     }
 
-    if (JsonObjectWriter_WriteInt(twinObject, MAX_LOCAL_CACHE_SIZE_KEY, twinConfiguration.maxLocalCacheSize) != JSON_WRITER_OK) {
+    if (JsonObjectWriter_Init(&configurationObject) != JSON_WRITER_OK) {
         result = TWIN_EXCEPTION;
         goto cleanup;
     }
 
-    if (JsonObjectWriter_WriteInt(twinObject, MAX_MESSAGE_SIZE_KEY, twinConfiguration.maxMessageSize) != JSON_WRITER_OK) {
-        result = TWIN_EXCEPTION;
+    result = TwinConfigurationUtils_WriteUintConfigurationToJson(configurationObject, MAX_LOCAL_CACHE_SIZE_KEY, twinConfiguration.maxLocalCacheSize);
+    if (result != TWIN_OK) {
+        goto cleanup;
+    }
+
+    result = TwinConfigurationUtils_WriteUintConfigurationToJson(configurationObject, MAX_MESSAGE_SIZE_KEY, twinConfiguration.maxMessageSize);
+    if (result != TWIN_OK) {
         goto cleanup;
     }
 
@@ -332,8 +309,8 @@ TwinConfigurationResult TwinConfiguration_GetSerializetTwinConfiguration(char** 
         result = TWIN_EXCEPTION;
         goto cleanup;
     }
-    if (JsonObjectWriter_WriteString(twinObject, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, timeSpan) != JSON_WRITER_OK) {
-        result = TWIN_EXCEPTION;
+    result = TwinConfigurationUtils_WriteStringConfigurationToJson(configurationObject, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, timeSpan);
+    if (result != TWIN_OK) {
         goto cleanup;
     }
 
@@ -341,8 +318,8 @@ TwinConfigurationResult TwinConfiguration_GetSerializetTwinConfiguration(char** 
         result = TWIN_EXCEPTION;
         goto cleanup;
     }
-    if (JsonObjectWriter_WriteString(twinObject, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, timeSpan) != JSON_WRITER_OK) {
-        result = TWIN_EXCEPTION;
+    result = TwinConfigurationUtils_WriteStringConfigurationToJson(configurationObject, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, timeSpan);
+    if (result != TWIN_OK) {
         goto cleanup;
     }
 
@@ -350,42 +327,37 @@ TwinConfigurationResult TwinConfiguration_GetSerializetTwinConfiguration(char** 
         result = TWIN_EXCEPTION;
         goto cleanup;
     }
-    if (JsonObjectWriter_WriteString(twinObject, SNAPSHOT_FREQUENCY_KEY, timeSpan) != JSON_WRITER_OK) {
-        result = TWIN_EXCEPTION;
+    result = TwinConfigurationUtils_WriteStringConfigurationToJson(configurationObject, SNAPSHOT_FREQUENCY_KEY, timeSpan);
+    if (result != TWIN_OK) {
         goto cleanup;
     }
 
-    if (JsonObjectWriter_Init(&eventPriorities) != JSON_WRITER_OK) {
-        result = TWIN_EXCEPTION;
-        goto cleanup;
-    }
-
-    result = TwinConfigurationEventPriorities_GetPrioritiesJson(eventPriorities);
+    result = TwinConfigurationEventCollectors_GetPrioritiesJson(configurationObject);
     if (result != TWIN_OK){
         goto cleanup;
     }
 
-    if (JsonObjectWriter_WriteObject(twinObject, EVENT_PROPERTIES_KEY, eventPriorities) != JSON_WRITER_OK){
+    if (JsonObjectWriter_WriteObject(twinRoot, twinConfigurationObjectName, configurationObject) != JSON_WRITER_OK) {
         result = TWIN_EXCEPTION;
         goto cleanup;
     }
 
-    if (JsonObjectWriter_Serialize(twinObject, twin, size) != JSON_WRITER_OK){
+    if (JsonObjectWriter_Serialize(twinRoot, twin, size) != JSON_WRITER_OK){
         result = TWIN_EXCEPTION;
         goto cleanup;
     }
 
 cleanup:
+    if (configurationObject != NULL) {
+        JsonObjectWriter_Deinit(configurationObject);
+    }
+
+    if (twinRoot != NULL) {
+        JsonObjectWriter_Deinit(twinRoot);
+    }
+
     if (Unlock(twinConfiguration.lock) != LOCK_OK) {
         return TWIN_LOCK_EXCEPTION;
-    }
-
-    if (eventPriorities != NULL) {
-        JsonObjectWriter_Deinit(eventPriorities);
-    }
-
-    if (twinObject != NULL) {
-        JsonObjectWriter_Deinit(twinObject);
     }
 
     return result;

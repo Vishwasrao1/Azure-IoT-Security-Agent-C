@@ -11,14 +11,18 @@ void LocalConfiguration_Deinit() {
     return;
 }
 
-char* LocalConfiguration_GetConnectionString() {
+const char* LocalConfiguration_GetConnectionString() {
     return "ConnctionStringStub";
 }
 
-char* LocalConfiguration_GetAgentId() {
+const char* LocalConfiguration_GetAgentId() {
     return "7aaeef0e-614f-4ff2-97d2-1442186f73fa";
 }
 
 uint32_t LocalConfiguration_GetTriggeredEventInterval() {
     return 1000;
+}
+
+const char* LocalConfiguration_GetRemoteConfigurationObjectName() {
+    return "ms_iotn:urn_azureiot_Security_SecurityAgentConfiguration";
 }

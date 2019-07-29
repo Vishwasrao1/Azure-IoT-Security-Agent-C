@@ -12,12 +12,12 @@
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
     char temp_str[256];
-    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
 }
 
@@ -25,7 +25,7 @@ BEGIN_TEST_SUITE(utils_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -39,7 +39,7 @@ TEST_SUITE_CLEANUP(suite_cleanup)
 {
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 }
 
 TEST_FUNCTION_INITIALIZE(method_init)
@@ -230,6 +230,40 @@ TEST_FUNCTION(Utils_ConcatenateToString_ExpectSuccess)
     bufferSize = 10;
     result = Utils_ConcatenateToString(&bufferPtr, &bufferSize, "%s %d %d %d", dummyMsg, 1, 2, 33);
     ASSERT_IS_FALSE(result);
+}
+
+TEST_FUNCTION(Utils_HexStringToByteArray_ExpectFail)
+{
+    char* hexString = "DEADBEEF";
+    unsigned char buffer[10];
+    uint32_t size = 2;
+    bool result = Utils_HexStringToByteArray(hexString, buffer, &size);
+    ASSERT_IS_FALSE(result);
+
+    hexString = "DEADBEE";
+    size = 10;
+    result = Utils_HexStringToByteArray(hexString, buffer, &size);
+    ASSERT_IS_FALSE(result);
+
+    hexString = "Really not hex";
+    size = 14;
+    result = Utils_HexStringToByteArray(hexString, buffer, &size);
+    ASSERT_IS_FALSE(result);
+}
+
+TEST_FUNCTION(Utils_HexStringToByteArray_ExpectSucess)
+{
+    char* hexString = "deadBEEF";
+    unsigned char buffer[10];
+    uint32_t size = 5;
+    bool result = Utils_HexStringToByteArray(hexString, buffer, &size);
+    ASSERT_IS_TRUE(result);
+    ASSERT_ARE_EQUAL(int, 4, size);
+
+    ASSERT_ARE_EQUAL(char, 222, *(buffer));
+    ASSERT_ARE_EQUAL(char, 173, *(buffer+1));
+    ASSERT_ARE_EQUAL(char, 190, *(buffer+2));
+    ASSERT_ARE_EQUAL(char, 239, *(buffer+3));
 }
 
 END_TEST_SUITE(utils_ut)

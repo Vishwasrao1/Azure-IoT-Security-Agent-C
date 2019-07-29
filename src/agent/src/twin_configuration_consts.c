@@ -2,9 +2,11 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include "twin_configuration_consts.h"
+#define EVENT_PRIO_PREFIX "eventPriority"
+#define EVENT_AGG_ENABLED_PREFIX "aggregationEnabled"
+#define EVENT_AGG_INTERVAL_PREFIX "aggregationInterval"
 
 /* ===== Twin configuration Schema =====*/
-const char* AGENT_CONFIGURATION_KEY = "azureiot*com^securityAgentConfiguration^1*0*0";
 const char* LOW_PRIORITY_MESSAGE_FREQUENCY_KEY = "lowPriorityMessageFrequency";
 const char* HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY = "highPriorityMessageFrequency";
 const char* MAX_LOCAL_CACHE_SIZE_KEY = "maxLocalCacheSizeInBytes";
@@ -15,13 +17,19 @@ const char* EVENT_PROPERTIES_KEY = "eventPriorities";
 
 /* ===== Event priorities schema =====*/
 
-const char* PROCESS_CREATE_PRIORITY_KEY = "processCreate";
-const char* LISTENING_PORTS_PRIORITY_KEY = "listeningPorts";
-const char* SYSTEM_INFORMATION_PRIORITY_KEY = "systemInformation";
-const char* LOCAL_USERS_PRIORITY_KEY = "localUsers";
-const char* LOGIN_PRIORITY_KEY = "login";
-const char* CONNECTION_CREATE_PRIORITY_KEY = "connectionCreate";
-const char* FIREWALL_CONFIGURATION_PRIORITY_KEY = "firewallConfiguration";
-const char* BASELINE_PRIORITY_KEY = "osBaseline";
-const char* DIAGNOSTIC_PRIORITY_KEY = "diagnostic";
-const char* OPERATIONAL_EVENT_KEY = "operational";
+const char* PROCESS_CREATE_PRIORITY_KEY = EVENT_PRIO_PREFIX"ProcessCreate";
+const char* LISTENING_PORTS_PRIORITY_KEY = EVENT_PRIO_PREFIX"ListeningPorts";
+const char* SYSTEM_INFORMATION_PRIORITY_KEY = EVENT_PRIO_PREFIX"SystemInformation";
+const char* LOCAL_USERS_PRIORITY_KEY = EVENT_PRIO_PREFIX"LocalUsers";
+const char* LOGIN_PRIORITY_KEY = EVENT_PRIO_PREFIX"Login";
+const char* CONNECTION_CREATE_PRIORITY_KEY = EVENT_PRIO_PREFIX"ConnectionCreate";
+const char* FIREWALL_CONFIGURATION_PRIORITY_KEY = EVENT_PRIO_PREFIX"FirewallConfiguration";
+const char* BASELINE_PRIORITY_KEY = EVENT_PRIO_PREFIX"OSBaseline";
+const char* DIAGNOSTIC_PRIORITY_KEY = EVENT_PRIO_PREFIX"Diagnostic";
+const char* OPERATIONAL_EVENT_KEY = EVENT_PRIO_PREFIX"Operational";
+
+/* ===== Event Aggregation Schema =====*/
+const char* PROCESS_CREATE_AGGREGATION_ENABLED_KEY = EVENT_AGG_ENABLED_PREFIX"ProcessCreate";
+const char* PROCESS_CREATE_AGGREGATION_INTERVAL_KEY = EVENT_AGG_INTERVAL_PREFIX"ProcessCreate";
+const char* CONNECTION_CREATE_AGGREGATION_ENABLED_KEY = EVENT_AGG_ENABLED_PREFIX"ConnectionCreate";
+const char* CONNECTION_CREATE_AGGREGATION_INTERVAL_KEY = EVENT_AGG_INTERVAL_PREFIX"ConnectionCreate";

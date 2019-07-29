@@ -267,7 +267,7 @@ EventCollectorResult AgentConfigurationErrorCollector_CreateTypeMismatchPayload(
 
     char* currentConfiguration = NULL;
     uint32_t configLen;
-    if (TwinConfiguration_GetSerializetTwinConfiguration(&currentConfiguration, &configLen) != TWIN_OK) {
+    if (TwinConfiguration_GetSerializedTwinConfiguration(&currentConfiguration, &configLen) != TWIN_OK) {
         result = EVENT_COLLECTOR_EXCEPTION;
         goto cleanup;
     }

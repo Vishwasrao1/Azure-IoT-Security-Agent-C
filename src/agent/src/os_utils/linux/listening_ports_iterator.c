@@ -78,7 +78,9 @@ ListeningPortsIteratorResults ListenintPortsIterator_Init(ListeningPortsIterator
 
     char currentLine[MAX_LINE_LENGTH] = "";
     // skip the first line (headers line)
-    fgets(currentLine, sizeof(currentLine), iteratorObj->procFile);
+    if (fgets(currentLine, sizeof(currentLine), iteratorObj->procFile) == NULL && ferror(iteratorObj->procFile)) {
+        result = LISTENING_PORTS_ITERATOR_EXCEPTION;
+    }
     
 cleanup:
     *iterator = (ListeningPortsIteratorHandle)iteratorObj;

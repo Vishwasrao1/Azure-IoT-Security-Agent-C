@@ -5,6 +5,8 @@ cmake_minimum_required(VERSION 2.8.11)
 
 include("../../cmake_config/utilityFunctions.cmake")
 include_directories(../../agent/inc)
+include_directories(../../${AZUREIOT_INC_FOLDER})
+
 add_definitions(-DDISABLE_LOGS)
 
 set(theseTestsName twin_update_task_ut)

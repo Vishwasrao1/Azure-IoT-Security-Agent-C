@@ -15,5 +15,6 @@ MOCKABLE_FUNCTION(, JSON_Status, json_object_set_value, JSON_Object*, object, co
 MOCKABLE_FUNCTION(, JSON_Status, json_object_set_boolean, JSON_Object*, object, const char*, name, int, boolean);
 MOCKABLE_FUNCTION(, char *, json_serialize_to_string, const JSON_Value*, value);
 MOCKABLE_FUNCTION(, JSON_Value*, json_parse_string, const char*, string);
+MOCKABLE_FUNCTION(, int, json_value_equals, const JSON_Value*, a, const JSON_Value*, b);
 
 

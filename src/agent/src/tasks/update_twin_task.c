@@ -8,8 +8,19 @@
 #include "twin_configuration.h"
 #include "logger.h"
 
-bool UpdateTwinTask_Init(UpdateTwinTask* task, SyncQueue* updateQueue) {
+/**
+ * @brief   Updates device twin with new configuration
+ * 
+ * @param   the iothub client to update the twin with
+ * 
+ * @return  true upon success
+ */
+static bool UpdateTwinTask_UpdateTwinReportedProperties(IoTHubAdapter* iothubClient);
+
+
+bool UpdateTwinTask_Init(UpdateTwinTask* task, SyncQueue* updateQueue, IoTHubAdapter* client) {
     task->updateQueue = updateQueue;
+    task->iothubClient = client;
     return true;
 }
 
@@ -36,6 +47,7 @@ void UpdateTwinTask_Deinit(UpdateTwinTask* task) {
     
 cleanup:
     task->updateQueue = NULL;
+    task->iothubClient = NULL;
 }
 
 void UpdateTwinTask_Execute(UpdateTwinTask* task) {
@@ -74,11 +86,19 @@ void UpdateTwinTask_Execute(UpdateTwinTask* task) {
     }
 
     bool complete = (workItem->state == TWIN_COMPLETE) ? true : false;
-    if (TwinConfiguration_Update(workItem->twinPayload, complete) != TWIN_OK) {
+    TwinConfigurationResult updateResult = TwinConfiguration_Update(workItem->twinPayload, complete);
+    if (updateResult != TWIN_OK) {
         //FIXME: do we want an error here?
         success = false;
+        if (updateResult != TWIN_PARSE_EXCEPTION) {
+            goto cleanup; // else configuration is valid
+        }
+    }
+
+    if (UpdateTwinTask_UpdateTwinReportedProperties(task->iothubClient) == false) {
+        success = false;
         goto cleanup;
-    }     
+    }
 
 cleanup:
     if (workItem != NULL) {
@@ -91,6 +111,29 @@ cleanup:
     if (!success) {
         //FIXME: handle error
     }
+}
+
+static bool UpdateTwinTask_UpdateTwinReportedProperties(IoTHubAdapter* iothubClient) {
+    bool success = true;
+    char* twinJson = NULL;
+    uint32_t jsonSize = 0;
+
+    if (TwinConfiguration_GetSerializedTwinConfiguration(&twinJson, &jsonSize) != TWIN_OK) {
+        success = false;
+        goto cleanup;
+    }
+
+    if (IoTHubAdapter_SetReportedPropertiesAsync(iothubClient, twinJson, jsonSize) != true) {
+        success = false;
+        goto cleanup;
+    }
+
+cleanup:
+    if (twinJson != NULL){
+        free(twinJson);
+    }
+
+    return success;
 }
 
 bool UpdateTwinTask_InitUpdateTwinTaskItem(UpdateTwinTaskItem** twinTaskItem, const unsigned char* payload, size_t size, bool isComplete) {
@@ -139,5 +182,3 @@ void UpdateTwinTask_DeinitUpdateTwinTaskItem(UpdateTwinTaskItem** twinTaskItem) 
     free(*twinTaskItem);
     *twinTaskItem = NULL;
 }
-
-

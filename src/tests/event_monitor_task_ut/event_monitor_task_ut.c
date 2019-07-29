@@ -23,7 +23,7 @@
 #include "internal/time_utils.h"
 #include "local_config.h"
 #include "synchronized_queue.h"
-#include "twin_configuration_event_priorities.h"
+#include "twin_configuration_event_collectors.h"
 #include "twin_configuration.h"
 #undef ENABLE_MOCKS
 
@@ -31,11 +31,11 @@
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code) {
     char temp_str[256];
-    snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
 }
 
@@ -46,7 +46,7 @@ TwinConfigurationResult Mocked_TwinConfiguration_GetSnapshotFrequency(uint32_t* 
     return TWIN_OK;
 }
 
-TwinConfigurationResult Mocked_TwinConfigurationEventPriorities_GetPriority(TwinConfiguartionEventType eventType, TwinConfiguartionEventPriority* priority){
+TwinConfigurationResult Mocked_TwinConfigurationEventCollectors_GetPriority(TwinConfigurationEventType eventType, TwinConfigurationEventPriority* priority){
     *priority = eventType == EVENT_TYPE_OPERATIONAL_EVENT ? EVENT_PRIORITY_OPERATIONAL : EVENT_PRIORITY_HIGH;
     return TWIN_OK;
 }
@@ -63,7 +63,7 @@ BEGIN_TEST_SUITE(event_monitor_task_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -77,22 +77,22 @@ TEST_SUITE_INITIALIZE(suite_init)
     REGISTER_UMOCK_ALIAS_TYPE(uint32_t, unsigned int);
     REGISTER_UMOCK_ALIAS_TYPE(int32_t, int);
     REGISTER_UMOCK_ALIAS_TYPE(time_t, int);
-    REGISTER_UMOCK_ALIAS_TYPE(TwinConfiguartionEventType, int);
+    REGISTER_UMOCK_ALIAS_TYPE(TwinConfigurationEventType, int);
 
     REGISTER_GLOBAL_MOCK_HOOK(TwinConfiguration_GetSnapshotFrequency, Mocked_TwinConfiguration_GetSnapshotFrequency);
-    REGISTER_GLOBAL_MOCK_HOOK(TwinConfigurationEventPriorities_GetPriority, Mocked_TwinConfigurationEventPriorities_GetPriority);
+    REGISTER_GLOBAL_MOCK_HOOK(TwinConfigurationEventCollectors_GetPriority, Mocked_TwinConfigurationEventCollectors_GetPriority);
     REGISTER_GLOBAL_MOCK_HOOK(SyncQueue_PushBack, Mocked_SyncQueue_PushBack);
 }
 
 TEST_SUITE_CLEANUP(suite_cleanup)
 {
     REGISTER_GLOBAL_MOCK_HOOK(TwinConfiguration_GetSnapshotFrequency, NULL);
-    REGISTER_GLOBAL_MOCK_HOOK(TwinConfigurationEventPriorities_GetPriority, NULL);
+    REGISTER_GLOBAL_MOCK_HOOK(TwinConfigurationEventCollectors_GetPriority, NULL);
     REGISTER_GLOBAL_MOCK_HOOK(SyncQueue_PushBack, NULL);
 
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 }
 
 TEST_FUNCTION_INITIALIZE(method_init)
@@ -210,25 +210,25 @@ TEST_FUNCTION(EventMonitorTask_ExecuteSnapshotTimeout_ExpectSuccess)
     STRICT_EXPECTED_CALL(TimeUtils_GetTimeDiff(IGNORED_NUM_ARG, IGNORED_NUM_ARG)).SetReturn(mockedSnapshotFrequiency * 10);
 
     // all periodic collectors
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_OPERATIONAL_EVENT, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_OPERATIONAL_EVENT, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(AgentTelemetryCollector_GetEvents(&operationalEventsQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_LOCAL_USERS, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_LOCAL_USERS, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(LocalUsersCollector_GetEvents(&highPriorityQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_SYSTEM_INFORMATION, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_SYSTEM_INFORMATION, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(SystemInformationCollector_GetEvents(&highPriorityQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_LISTENING_PORTS, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_LISTENING_PORTS, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(ListeningPortCollector_GetEvents(&highPriorityQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_FIREWALL_CONFIGURATION, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_FIREWALL_CONFIGURATION, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(FirewallCollector_GetEvents(&highPriorityQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_BASELINE, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_BASELINE, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(BaselineCollector_GetEvents(&highPriorityQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_DIAGNOSTIC, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_DIAGNOSTIC, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(DiagnosticEventCollector_GetEvents(&highPriorityQueue));
 
     // check triggered events interval
@@ -266,19 +266,19 @@ TEST_FUNCTION(EventMonitorTask_ExecuteTriggeredTimeout_ExpectSuccess)
     STRICT_EXPECTED_CALL(LocalConfiguration_GetTriggeredEventInterval()).SetReturn(triggeredInterval);
 
     // all collectors
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_OPERATIONAL_EVENT, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_OPERATIONAL_EVENT, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(AgentConfigurationErrorCollector_GetEvents(&operationalEventsQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_PROCESS_CREATE, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_PROCESS_CREATE, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(ProcessCreationCollector_GetEvents(&highPriorityQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_USER_LOGIN, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_USER_LOGIN, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(UserLoginCollector_GetEvents(&highPriorityQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_CONNECTION_CREATE, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_CONNECTION_CREATE, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(ConnectionCreationEventCollector_GetEvents(&highPriorityQueue));
 
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPriority(EVENT_TYPE_DIAGNOSTIC, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPriority(EVENT_TYPE_DIAGNOSTIC, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(DiagnosticEventCollector_GetEvents(&highPriorityQueue));
 
     EventMonitorTask_Execute(&task);

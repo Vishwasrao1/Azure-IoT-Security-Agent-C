@@ -9,13 +9,15 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 typedef enum _FileResults {
 
     FILE_UTILS_OK,
     FILE_UTILS_FILE_NOT_FOUND,
     FILE_UTILS_SIZE_MISMATCH,
-    FILE_UTILS_ERROR
+    FILE_UTILS_ERROR,
+    FILE_UTILS_NOPERM
 
 } FileResults;
 
@@ -41,5 +43,16 @@ MOCKABLE_FUNCTION(, FileResults, FileUtils_WriteToFile, const char*, filename, c
  * @return FILE_UTILS_OK in case of success or the appropriate error in case of failure.
  */
 MOCKABLE_FUNCTION(, FileResults, FileUtils_ReadFile, const char*, filename, void*, data, uint32_t, readCount, bool, maxCount);
+
+/**
+ * @brief Opens a file 
+ * 
+ * @param   filename    The path of the file to open
+ * @param   mode        Flags for opening the file (i.e "r", "rw", "rb" etc...)
+ * @param   outFile     Out param. the opened file handler
+ * 
+ * @return FILE_UTILS_OK in case of success or the appropriate error in case of failure.
+ */
+MOCKABLE_FUNCTION(, FileResults, FileUtils_OpenFile, const char*, filename, const char*, mode, FILE**, outFile);
 
 #endif //FILE_UTILS_H

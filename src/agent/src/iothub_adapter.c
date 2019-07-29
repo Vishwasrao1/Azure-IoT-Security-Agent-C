@@ -6,7 +6,6 @@
 #include <stdlib.h>
 
 #include "azure_c_shared_utility/threadapi.h"
-#include "iothub.h"
 #include "iothub_client_options.h"
 #include "iothubtransportamqp.h"
 
@@ -15,6 +14,16 @@
 #include "logger.h"
 #include "message_schema_consts.h"
 #include "tasks/update_twin_task.h"
+#include "agent_errors.h"
+
+#ifdef USE_MQTT
+#include "iothubtransportmqtt.h"
+IOTHUB_CLIENT_TRANSPORT_PROVIDER protocol = MQTT_Protocol;
+#endif
+#ifdef USE_AMQP
+#include "iothubtransportamqp.h"
+IOTHUB_CLIENT_TRANSPORT_PROVIDER protocol = AMQP_Protocol;
+#endif
 
 /**
  * @brief This function is called upon receiving confirmation of the delivery of the IoT Hub message
@@ -23,6 +32,14 @@
  * @param   userContextCallback     The user context for the callback.
  */
 static void IoTHubAdapter_SendConfirmCallback(IOTHUB_CLIENT_CONFIRMATION_RESULT result, void* userContextCallback);
+
+/**
+ * @brief This function is called upon receiving confirmation of setting up device twin reported properties
+ * 
+ * @param   statusCode      The statusCode of the callback
+ * @param   userContext     The user context for the callback.
+ */
+static void IoTHubAdapter_SetReportedConfirmCallback(int statusCode, void* userContext);
 
 /**
  * @brief This function is called upon receiving updates about the status of the connection to IoT Hub.
@@ -43,21 +60,73 @@ static void IoTHubAdapter_ConnectionStatusCallback(IOTHUB_CLIENT_CONNECTION_STAT
  */
 static void IoTHubAdapter_DeviceTwinCallback(DEVICE_TWIN_UPDATE_STATE updateState, const unsigned char* payload, size_t size, void* userContextCallback);
 
+/**
+ * @brief Initiate a new IoT hub module client internal state
+ * 
+ * @param   iotHubAdapter       The adapter to initiate.
+ * @param   twinUpdatesQueue    The queue which will contain all the twin updates
+ * 
+ * @return true on success, false otherwise.
+ */
+static bool IoTHubAdapter_Init_Internal(IoTHubAdapter* iotHubAdapter, SyncQueue* twinUpdatesQueue);
+
+/**
+ * @brief Deinitialize the IoT hub module client internal state
+ * 
+ * @param   iotHubAdapter   The adapter to deinitiate.
+ */
+static void IoTHubAdapter_Deinit_Internal(IoTHubAdapter* iotHubAdapter);
+
+/**
+ * @brief Re-initiate a new IoT hub module client
+ * 
+ * @param   iotHubAdapter       The adapter to initiate.
+ * @param   twinUpdatesQueue    The queue which will contain all the twin updates
+ * 
+ * @return true on success, false otherwise.
+ */
+static bool IoTHubAdapter_Reinit(IoTHubAdapter* iotHubAdapter, SyncQueue* twinUpdatesQueue);
+
+/**
+ * @brief Send message a-sync to the hub (internal function).
+ * 
+ * @param   iotHubAdapter   The adapter to send data with.
+ * @param   data            The data to send.
+ * @param   dataSize        The size of the data we want to send.
+ * 
+ * @return true on success, false otherwise.
+ */
+static bool IoTHubAdapter_SendMessageAsync_Internal(IoTHubAdapter* iotHubAdapter, const void* data, size_t dataSize);
+
+static LOCK_HANDLE iotHubAdapterLock = NULL;
 
 bool IoTHubAdapter_Init(IoTHubAdapter* iotHubAdapter, SyncQueue* twinUpdatesQueue) {
+    iotHubAdapterLock = Lock_Init();
+    if (iotHubAdapterLock == NULL) {
+        Logger_Error("Could not initialize IoTHubAdapter lock");
+        return false;
+    }
 
+    if (Lock(iotHubAdapterLock) != LOCK_OK) {
+        Logger_Error("Could not lock IoTHubAdapter lock");
+        return false;
+    }
+
+    bool result = IoTHubAdapter_Init_Internal(iotHubAdapter, twinUpdatesQueue);
+
+    if (Unlock(iotHubAdapterLock) != LOCK_OK) {
+        Logger_Error("Could not unlock IoTHubAdapter lock");
+        return false;
+    }
+
+    return result;
+}
+
+bool IoTHubAdapter_Init_Internal(IoTHubAdapter* iotHubAdapter, SyncQueue* twinUpdatesQueue) {
     bool success = true;
     memset(iotHubAdapter, 0, sizeof(*iotHubAdapter));
     
-    if (IoTHub_Init() != 0) {
-        success = false;
-        goto cleanup;
-    }
-    
-    iotHubAdapter->hubInitiated = true;
     iotHubAdapter->twinUpdatesQueue = twinUpdatesQueue;
-
-    IOTHUB_CLIENT_TRANSPORT_PROVIDER protocol = AMQP_Protocol;
 
     // Create the iothub handle here
     iotHubAdapter->moduleHandle = IoTHubModuleClient_CreateFromConnectionString(LocalConfiguration_GetConnectionString(), protocol);
@@ -66,8 +135,16 @@ bool IoTHubAdapter_Init(IoTHubAdapter* iotHubAdapter, SyncQueue* twinUpdatesQueu
         goto cleanup;
     }
 
-    bool traceOn = true;
-    if (IoTHubModuleClient_SetOption(iotHubAdapter->moduleHandle, OPTION_LOG_TRACE, &traceOn) != IOTHUB_CLIENT_OK) {
+#ifdef USE_MQTT
+    bool urlEncodeOn = true;
+    if (IoTHubModuleClient_SetOption(iotHubAdapter->moduleHandle, OPTION_AUTO_URL_ENCODE_DECODE, &urlEncodeOn) != IOTHUB_CLIENT_OK) {
+        success = false;
+        goto cleanup;
+    }
+#endif
+
+    bool logTraces = false;
+    if (IoTHubModuleClient_SetOption(iotHubAdapter->moduleHandle, OPTION_LOG_TRACE, &logTraces) != IOTHUB_CLIENT_OK) {
         success = false;
         goto cleanup;
     }
@@ -87,42 +164,140 @@ bool IoTHubAdapter_Init(IoTHubAdapter* iotHubAdapter, SyncQueue* twinUpdatesQueu
     if (!success){
         goto cleanup;
     }
-        
+    
+    iotHubAdapter->hubInitiated = true;
 
 cleanup:
     if (!success) {
-        IoTHubAdapter_Deinit(iotHubAdapter);
+        IoTHubAdapter_Deinit_Internal(iotHubAdapter);
     }
 
     return success;
 }
 
 void IoTHubAdapter_Deinit(IoTHubAdapter* iotHubAdapter) {
-    AgentTelemetryCounter_Deinit(&iotHubAdapter->messageCounter);
-
-    if (iotHubAdapter->hubInitiated) {
-        IoTHub_Deinit();
+    if (iotHubAdapterLock == NULL || Lock(iotHubAdapterLock) != LOCK_OK) {
+        Logger_Error("Could not lock IoTHubAdapter lock");
+        return;
     }
+
+    IoTHubAdapter_Deinit_Internal(iotHubAdapter);
+
+    if (Unlock(iotHubAdapterLock) != LOCK_OK) {
+        Logger_Error("Could not unlock IoTHubAdapter lock");
+        return;
+    }
+
+    if (Lock_Deinit(iotHubAdapterLock) != LOCK_OK) {
+        Logger_Error("Could not de-initialize IotHubAdapter lock");
+    }
+    iotHubAdapterLock = NULL;
+}
+
+void IoTHubAdapter_Deinit_Internal(IoTHubAdapter* iotHubAdapter) {
+    iotHubAdapter->hubInitiated = false;
+    AgentTelemetryCounter_Deinit(&iotHubAdapter->messageCounter);
 
     if (iotHubAdapter->moduleHandle != NULL) {
         IoTHubModuleClient_Destroy(iotHubAdapter->moduleHandle);
     }
-
 }
 
-bool IoTHubAdapter_Connect(IoTHubAdapter* iotHubAdapter) {
-    //FIXME: add some timeout to this function so we will not loop forever
-    while (!iotHubAdapter->connected || !iotHubAdapter->hasTwinConfiguration) {
-        ThreadAPI_Sleep(100);
+bool IoTHubAdapter_Reinit(IoTHubAdapter* iotHubAdapter, SyncQueue* twinUpdatesQueue) {
+    IoTHubAdapter_Deinit_Internal(iotHubAdapter);
+    if (!IoTHubAdapter_Init_Internal(iotHubAdapter, twinUpdatesQueue)) {
+        Logger_Error("Could not initialize IoTHub adapter");
+        return false;
+    }
+
+    if (!IoTHubAdapter_Connect(iotHubAdapter)) {
+        Logger_Error("Could not connect to IoT Hub");
+        return false;
     }
 
     return true;
 }
 
-bool IoTHubAdapter_SendMessageAsync(IoTHubAdapter* iotHubAdapter, const void* data, size_t dataSize) {
+bool IoTHubAdapter_ValidateAdapterConnectionStatus(IoTHubAdapter* adapter, bool* isPermanent) {
+    *isPermanent = false;
+    if (adapter->connected) {
+        return true;
+    } 
+    
+    if (adapter->connectionStatusReason == IOTHUB_CLIENT_CONNECTION_BAD_CREDENTIAL 
+            || adapter->connectionStatusReason == IOTHUB_CLIENT_CONNECTION_NO_NETWORK) {
+        *isPermanent = true;
+    }
+    return false;
+}
 
+bool IoTHubAdapter_Connect(IoTHubAdapter* iotHubAdapter) {
+    uint32_t timeout = LocalConfiguration_GetConnectionTimeout();
+    uint32_t elapsedTime = 0;
+    bool stop = false;
+    while (!stop && elapsedTime < timeout) {
+        bool isPermanent;
+        bool isConnected = IoTHubAdapter_ValidateAdapterConnectionStatus(iotHubAdapter, &isPermanent);
+        stop = (isConnected && iotHubAdapter->hasTwinConfiguration) || isPermanent;
+        ThreadAPI_Sleep(100);
+        elapsedTime += 100;
+    }
+
+    if (iotHubAdapter->connected && iotHubAdapter->hasTwinConfiguration) {
+        return true;
+    } 
+    
+    if (iotHubAdapter->connected) {
+        AgentErrors_LogError(ERROR_REMOTE_CONFIGURATION, SUBCODE_TIMEOUT, "Couldn't fetch remote configuration within timeout period");    
+    } else if (iotHubAdapter->connectionStatusReason == IOTHUB_CLIENT_CONNECTION_BAD_CREDENTIAL) {
+        AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_UNAUTHORIZED, "Validate authentication configuration");
+    } else if (iotHubAdapter->connectionStatusReason == IOTHUB_CLIENT_CONNECTION_NO_NETWORK) {
+        AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_OTHER, "No network");
+    } else {
+        AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_OTHER, "Couldn't connect to iot hub within timeout period");
+    }
+    
+    return false;
+}
+
+bool IoTHubAdapter_SendMessageAsync(IoTHubAdapter* iotHubAdapter, const void* data, size_t dataSize) {
+    if (iotHubAdapterLock == NULL || Lock(iotHubAdapterLock) != LOCK_OK) {
+        Logger_Error("Send message failed. Could not aquire lock");
+        return false;
+    }
+
+    bool success = IoTHubAdapter_SendMessageAsync_Internal(iotHubAdapter, data, dataSize);
+
+    if (Unlock(iotHubAdapterLock) != LOCK_OK) {
+        Logger_Error("Could not unlock IoTHubAdapter lock");
+        success = false;
+    }
+
+    return success;
+}
+
+static bool IoTHubAdapter_SendMessageAsync_Internal(IoTHubAdapter* iotHubAdapter, const void* data, size_t dataSize) {
     bool success = true;
     IOTHUB_MESSAGE_HANDLE messageHandle = NULL;
+
+    if (!iotHubAdapter->hubInitiated) {
+        Logger_Error("Cannot send message, hub not initiated");
+        success = false;
+        goto cleanup;
+    }
+
+    if (!iotHubAdapter->connected && LocalConfiguration_UseDps()) {
+        if (!LocalConfiguration_TryRenewConnectionString()) {
+            Logger_Error("Could not renew connection string");
+            success = false;
+            goto cleanup;
+        }
+        if (!IoTHubAdapter_Reinit(iotHubAdapter, iotHubAdapter->twinUpdatesQueue)) {
+            Logger_Error("Could not re-initialize IoTHub adapter");
+            success = false;
+            goto cleanup;
+        }
+    }
 
     messageHandle = IoTHubMessage_CreateFromByteArray(data, dataSize);
 
@@ -151,6 +326,7 @@ bool IoTHubAdapter_SendMessageAsync(IoTHubAdapter* iotHubAdapter, const void* da
     Logger_Debug("IoTHubClient accepted the message for delivery");
 
 cleanup:
+
     if (messageHandle != NULL) {
         IoTHubMessage_Destroy(messageHandle);
     }
@@ -177,14 +353,15 @@ static void IoTHubAdapter_ConnectionStatusCallback(IOTHUB_CLIENT_CONNECTION_STAT
     }
 
     IoTHubAdapter* adapter = (IoTHubAdapter*)(userContextCallback);
-
+    adapter->connectionStatusReason = reason;
     // This sample DOES NOT take into consideration network outages.
-    if (result == IOTHUB_CLIENT_CONNECTION_AUTHENTICATED) {
+    if (result == IOTHUB_CLIENT_CONNECTION_AUTHENTICATED && reason == IOTHUB_CLIENT_CONNECTION_OK) {
         adapter->connected = true;
         Logger_Information("The module client is connected to iothub");
     } else {
+        if (adapter->connected)
+            Logger_Information("The module client has been disconnected");
         adapter->connected = false;
-        Logger_Information("The module client has been disconnected");
     }
 }
 
@@ -223,5 +400,33 @@ cleanup:
         }
     } else {
         adapter->hasTwinConfiguration = true;
+    }
+}
+
+bool IoTHubAdapter_SetReportedPropertiesAsync(IoTHubAdapter* iotHubAdapter, const void* reportedData, size_t dataSize) {
+    bool success = true;
+
+    if (reportedData == NULL)
+    {
+        Logger_Error("Invalid argument - byteArray is NULL");
+        success = false;
+        goto cleanup;
+    }
+
+    if (IoTHubModuleClient_SendReportedState(iotHubAdapter->moduleHandle, reportedData, dataSize, IoTHubAdapter_SetReportedConfirmCallback, NULL) != IOTHUB_CLIENT_OK) {
+        Logger_Warning("failed to hand over the reported properties to IoTHubClient");
+        success = false;
+        goto cleanup;
+    }
+
+    Logger_Debug("IoTHubClient set reported properties");
+
+cleanup:
+    return success;
+}
+
+static void IoTHubAdapter_SetReportedConfirmCallback(int statusCode, void* userContext) {
+    if (statusCode != 200) {
+        Logger_Error("Couldn't set reproted propertis");
     }
 }

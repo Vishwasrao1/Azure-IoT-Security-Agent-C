@@ -19,6 +19,7 @@ typedef struct _IoTHubAdapter {
     IOTHUB_MODULE_CLIENT_HANDLE moduleHandle;
     bool hasTwinConfiguration;
     bool connected;
+    IOTHUB_CLIENT_CONNECTION_STATUS_REASON connectionStatusReason;
     bool hubInitiated;
     SyncQueue* twinUpdatesQueue;
     SyncedCounter messageCounter;
@@ -61,5 +62,16 @@ MOCKABLE_FUNCTION(, bool, IoTHubAdapter_Connect, IoTHubAdapter*, iotHubAdapter);
  * @return true on success, false otherwise.
  */
 MOCKABLE_FUNCTION(, bool, IoTHubAdapter_SendMessageAsync, IoTHubAdapter*, iotHubAdapter, const void*, data, size_t, dataSize);
+
+/**
+ * @brief Set reported properties to device twin module/
+ * 
+ * @param   iotHubAdapter   The adapter to set reported properties with
+ * @param   reportedData    The reprted data to set.
+ * @param   dataSize        The size of the data we want to send.
+ * 
+ * @return  true on success, false otherwise.
+ */
+MOCKABLE_FUNCTION(, bool, IoTHubAdapter_SetReportedPropertiesAsync, IoTHubAdapter*, iotHubAdapter, const void*, data, size_t, dataSize);
 
 #endif //IOTHUB_ADAPTER_H

@@ -17,6 +17,7 @@ RUN apt-get clean -y && apt-get update -y && apt-get install -y \
 # Create Image with the source code to build the agent
 FROM builder_base as code_base
 RUN mkdir /source_code
+COPY Azure-IoT-Security/ /source_code/Azure-IoT-Security
 COPY azure-iot-sdk-c/ /source_code/azure-iot-sdk-c
 COPY umock-c/ /source_code/umock-c
 COPY CMakeLists.txt /source_code/CMakeLists.txt
@@ -30,7 +31,9 @@ RUN /bin/bash /source_code/build/build.sh --valgrind --unit-tests
 
 # run the unit tests one clean machine
 FROM ubuntu:xenial-20181113 as test
-RUN apt-get clean -y && apt-get update -y && apt-get install -y cmake valgrind 
+RUN apt-get clean -y && apt-get update -y && apt-get install -y cmake valgrind npm
+RUN npm install -g ajv-cli
+RUN ln -s /usr/bin/nodejs /usr/bin/node
 
 COPY --from=code_base /source_code/cmake/agent_linux/ /source_code/cmake/agent_linux
 
@@ -41,7 +44,7 @@ RUN cd /source_code/cmake/agent_linux; ctest
 # install the agnet on clean ubuntu
 FROM ubuntu:xenial-20181113
 RUN apt-get clean -y && apt-get update -y && apt-get install -y dos2unix
-COPY --from=code_base /source_code/cmake/agent_linux/agent/install /tmp/agent_linux/install
+COPY --from=code_base /source_code/cmake/agent_linux/agent/Install /tmp/agent_linux/Install
 # TODO: preper the VM for agent installation.
 #       setup new device - and install OMS and the other services and dependencies.
 # CMD /bin/bash /tmp/agent_linux/install/InstallAgent.sh

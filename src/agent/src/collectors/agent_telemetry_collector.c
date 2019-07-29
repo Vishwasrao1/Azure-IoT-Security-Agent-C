@@ -81,7 +81,7 @@ cleanup:
 
 EventCollectorResult AgentTelemetryCollector_AddQueueCounterPayload(JsonArrayWriterHandle payloadHandle, AgentQueueMeter queueMeter){
     EventCollectorResult result = EVENT_COLLECTOR_OK;
-    QueueCounter counterData;
+    QueueCounter counterData = {0};
     if (AgentTelemetryProvider_GetQueueCounterData(queueMeter, &counterData) != TELEMETRY_PROVIDER_OK){
         result =  EVENT_COLLECTOR_EXCEPTION;
         goto cleanup;

@@ -10,3 +10,4 @@ MOCKABLE_FUNCTION(, int, open, const char*, path, int, flag);
 MOCKABLE_FUNCTION(, int, close, int, fd)
 MOCKABLE_FUNCTION(, ssize_t, write, int, fd, const void*, buffer, size_t, size)
 MOCKABLE_FUNCTION(, ssize_t, read, int, fd, void*, buffer, size_t, size)
+MOCKABLE_FUNCTION(, FILE*, fopen, const char*, path, const char*, mode);

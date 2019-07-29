@@ -139,3 +139,20 @@ bool Utils_AddUnsignedIntsWithOverflowCheck(uint32_t* result, uint32_t a, uint32
     *result = a + b;
     return true;
 }
+
+bool Utils_HexStringToByteArray(const char* hexString, unsigned char* buffer, uint32_t* bufferSize) {
+    uint32_t hexStringLen = strlen(hexString);
+    if (hexStringLen % 2 == 1 || hexStringLen / 2 >= *bufferSize) {
+            return false;
+    }
+
+    for (uint32_t i = 0; i < hexStringLen; i+= 2) {
+        if (sscanf(hexString+i, "%2hhx", &buffer[i/2]) != 1) {
+            return false;
+        }
+    }
+
+    buffer[hexStringLen / 2] = 0; // Terminate with null
+    *bufferSize = hexStringLen / 2;
+    return true;
+}

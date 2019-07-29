@@ -7,6 +7,11 @@
 #include <stdint.h>
 
 /**
+ * Agent's name
+ */
+extern const char AGENT_NAME[];
+
+/**
  * Agent's version
  */
 extern const char AGENT_VERSION[];

@@ -61,10 +61,13 @@ MOCKABLE_FUNCTION(, const char*, UsersIterator_GetUsername, UsersIteratorHandle,
  * @bried Gets the current user id.
  * 
  * @param   iterator    The iterator instance.
+ * @param   outBuffer    Pointer to a buffer where the resulting user id will be stored.
+ * @param   outBufferSize   In out param. On calling the parameter will contain the size of the buffer.
+ *                          On return it will contain the actual size of the output; 
  * 
- * @return The user id of the current user.
+ * @return USER_ITERATOR_OK of success or USER_ITERATOR_EXCEPTION otherwise.
  */
-MOCKABLE_FUNCTION(, int32_t, UsersIterator_GetUserId, UsersIteratorHandle, iterator);
+MOCKABLE_FUNCTION(, UserIteratorResults, UsersIterator_GetUserId, UsersIteratorHandle, iterator, char*, outBuffer, int32_t*, outBufferSize);
 
 /**
  * @bried Creates a new groups iterator for the current user.

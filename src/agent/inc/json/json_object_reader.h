@@ -40,14 +40,23 @@ MOCKABLE_FUNCTION(, JsonReaderResult, JsonObjectReader_InitFromFile, JsonObjectR
 MOCKABLE_FUNCTION(, void, JsonObjectReader_Deinit, JsonObjectReaderHandle, handle);
 
 /**
- * @brief Sets the new root of the json reader to be the given key. The operation is unreversible.
+ * @brief Sets the new root of the json reader to be the given key.
  * 
  * @param   handle  Out param. The handle to use for the json reader operations.
- * @param   data    The json the reader should use.
+ * @param   key     The key to set the root.
  * 
  * @return JSON_READER_OK on success, an indicative error in failure. The state of the reader will be the same in case of error.
  */
 MOCKABLE_FUNCTION(, JsonReaderResult, JsonObjectReader_StepIn, JsonObjectReaderHandle, handle, const char*, key);
+
+/**
+ * @brief Sets the new root of the json reader to be parent object.
+ * 
+ * @param   handle  Out param. The handle to use for the json reader operations.
+ * 
+ * @return JSON_READER_OK on success, an indicative error in failure. The state of the reader will be the same in case of error.
+ */
+MOCKABLE_FUNCTION(, JsonReaderResult, JsonObjectReader_StepOut, JsonObjectReaderHandle, handle);
 
 /**
  * @brief Reads the given key from the json as integer.
@@ -103,5 +112,16 @@ MOCKABLE_FUNCTION(, JsonReaderResult, JsonObjectReader_ReadArray, JsonObjectRead
  * @return JSON_READER_OK on success, an indicative error in failure.
  */
 MOCKABLE_FUNCTION(, JsonReaderResult, JsonObjectReader_ReadObject, JsonObjectReaderHandle, handle, const char*, key, JsonObjectReaderHandle*, output);
+
+/**
+ * @brief Reads the given key from the json as boolean.
+ * 
+ * @param   handle  The json reader instance.
+ * @param   key     The key to read.
+ * @param   output  Out param. The boolean value of the field.
+ * 
+ * @return JSON_READER_OK on success, an indicative error in failure.
+ */
+MOCKABLE_FUNCTION(, JsonReaderResult, JsonObjectReader_ReadBool, JsonObjectReaderHandle, handle, const char*, key, bool*, output);
 
 #endif //JSON_OBJECT_READER_H

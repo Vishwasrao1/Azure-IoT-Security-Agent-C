@@ -18,6 +18,7 @@ set(${theseTestsName}_c_files
 )
 
 set(${theseTestsName}_h_files
+    ../../agent/src/agent_errors.c
     openssl_mock.h
     std_mocks.h
 )

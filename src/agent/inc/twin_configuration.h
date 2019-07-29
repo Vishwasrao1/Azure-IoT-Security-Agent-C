@@ -95,7 +95,7 @@ MOCKABLE_FUNCTION(, TwinConfigurationResult, TwinConfiguration_GetSnapshotFreque
  * 
  * @return  TWIN_OK         on success or an error code upon failure
  */
-MOCKABLE_FUNCTION(, TwinConfigurationResult, TwinConfiguration_GetSerializetTwinConfiguration, char**,  twin, uint32_t*, size);
+MOCKABLE_FUNCTION(, TwinConfigurationResult, TwinConfiguration_GetSerializedTwinConfiguration, char**,  twin, uint32_t*, size);
 
 /**
  * @brief   gets the result of the last twin update

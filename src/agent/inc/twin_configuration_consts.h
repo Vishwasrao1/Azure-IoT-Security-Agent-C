@@ -5,7 +5,6 @@
 #define TWIN_CONFIGURATION_CONSTS_H
 
 /* ===== Twin configuration Schema =====*/
-extern const char* AGENT_CONFIGURATION_KEY;
 extern const char* LOW_PRIORITY_MESSAGE_FREQUENCY_KEY;
 extern const char* HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY;
 extern const char* MAX_LOCAL_CACHE_SIZE_KEY;
@@ -25,5 +24,11 @@ extern const char* FIREWALL_CONFIGURATION_PRIORITY_KEY;
 extern const char* BASELINE_PRIORITY_KEY;
 extern const char* DIAGNOSTIC_PRIORITY_KEY;
 extern const char* OPERATIONAL_EVENT_KEY;
+
+/* ===== Event Aggregation Schema =====*/
+extern const char* PROCESS_CREATE_AGGREGATION_ENABLED_KEY;
+extern const char* PROCESS_CREATE_AGGREGATION_INTERVAL_KEY;
+extern const char* CONNECTION_CREATE_AGGREGATION_ENABLED_KEY;
+extern const char* CONNECTION_CREATE_AGGREGATION_INTERVAL_KEY;
 
 #endif //TWIN_CONFIGURATION_CONSTS_H

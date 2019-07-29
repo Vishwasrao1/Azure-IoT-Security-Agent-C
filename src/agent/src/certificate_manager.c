@@ -9,6 +9,8 @@
 #include <openssl/pem.h>
 #include <openssl/pkcs12.h>
 
+#include "agent_errors.h"
+#include "os_utils/file_utils.h"
 #include "utils.h"
 
 #define MAX_CERT 2000
@@ -56,6 +58,15 @@ static char* CertificateManager_X509CertificateToPemFormat(X509* certificate);
  * @return  the private key, in pem format (base 64).
  */
 static char* CertificateManager_PrivateKeyToPemFormat(EVP_PKEY* privateKey);
+
+/**
+ * @brief   Opens the given file path as a binary in read mode
+ * 
+ * @param   filePath  path to the file to open
+ * 
+ * @return  file handle
+ */
+static FILE* CertificateManager_OpenFileForRead(const char* file);
 
 static char* CertificateManager_X509CertificateToPemFormat(X509* certificate) {
     BIO* bio = NULL;
@@ -125,7 +136,7 @@ static bool CertificateManager_LoadFromFileUsingPemFormat(const char* filePath, 
     bool result = true;
     X509* x509Certificate = NULL;
     EVP_PKEY* evpPrivateKey = NULL;
-    FILE* certificateFile = fopen(filePath, "rb");
+    FILE* certificateFile = CertificateManager_OpenFileForRead(filePath);
     if (certificateFile == NULL) {
         result = false;
         goto cleanup;
@@ -133,6 +144,7 @@ static bool CertificateManager_LoadFromFileUsingPemFormat(const char* filePath, 
 
     x509Certificate = PEM_read_X509(certificateFile, NULL, NULL, NULL);
     if (x509Certificate == NULL) {
+        AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_FILE_FORMAT, "Couldn't parse certificate");
         result = false;
         goto cleanup;
     }
@@ -140,6 +152,7 @@ static bool CertificateManager_LoadFromFileUsingPemFormat(const char* filePath, 
 
     evpPrivateKey = PEM_read_PrivateKey(certificateFile, NULL, NULL, NULL);
     if (evpPrivateKey == NULL) {
+        AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_FILE_FORMAT, "Couldn't read private key from certificate");
         result = false;
         goto cleanup;
     }
@@ -176,7 +189,7 @@ static bool CertificateManager_LoadFromFileUsingPkcs12Format(const char* filePat
     EVP_PKEY* evpPrivateKey = NULL;
     X509* x509Certificate = NULL;
 
-    FILE* certificateFile = fopen(filePath, "rb");
+    FILE* certificateFile = CertificateManager_OpenFileForRead(filePath);
     if (certificateFile == NULL) {
         result = false;
         goto cleanup;
@@ -184,11 +197,13 @@ static bool CertificateManager_LoadFromFileUsingPkcs12Format(const char* filePat
 
     d2i_PKCS12_fp(certificateFile, &pkcs12Certificate);
     if (pkcs12Certificate == NULL) {
+        AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_FILE_FORMAT, "Couldn't parse certificate");
         result = false;
         goto cleanup;
     }
 
     if (PKCS12_parse(pkcs12Certificate, NULL, &evpPrivateKey, &x509Certificate, NULL) != 1) {
+        AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_FILE_FORMAT, "Couldn't parse certificate");
         result = false;
         goto cleanup;
     }
@@ -240,5 +255,22 @@ bool CertificateManager_LoadFromFile(const char* filePath, char** certificate, c
         return CertificateManager_LoadFromFileUsingPkcs12Format(filePath, certificate, privateKey);
     }
 
+    AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_FILE_FORMAT, "Certificate of type %s, is not supported", extension);
     return false;
+}
+
+static FILE* CertificateManager_OpenFileForRead(const char* filePath) {
+    FILE* fd = NULL;
+    FileResults fileResult = FileUtils_OpenFile(filePath, "rb", &fd);
+    if (fileResult != FILE_UTILS_OK) {
+        if (fileResult == FILE_UTILS_FILE_NOT_FOUND) {
+            AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_FILE_NOT_EXIST, "File not found in path: %s", filePath);
+        } else if (fileResult == FILE_UTILS_NOPERM) {
+            AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_FILE_PERMISSIONS, "Couldn't open file in path: %s, check permissions", filePath);
+        } else {
+            AgentErrors_LogError(ERROR_IOT_HUB_AUTHENTICATION, SUBCODE_OTHER, "Unexpected error while opening file: %s", filePath);
+        }
+    }
+    
+    return fd;
 }

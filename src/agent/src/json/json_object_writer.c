@@ -151,3 +151,33 @@ JsonWriterResult JsonObjectWriter_WriteObject(JsonObjectWriterHandle writer, con
     objToAdd->shouldFree = false;   
     return JSON_WRITER_OK;
 }
+
+JsonWriterResult JsonObjectWriter_Copy(JsonObjectWriterHandle* dst, JsonObjectWriterHandle src) {
+    JsonWriterResult result = JSON_WRITER_OK;
+
+    char* serializedSource = NULL;
+    uint32_t size = 0;
+    result = JsonObjectWriter_Serialize(src, &serializedSource, &size);
+    if (result != JSON_WRITER_OK) {
+        goto cleanup;
+    }
+
+    result = JsonObjectWriter_InitFromString(dst, serializedSource);
+    if (result != JSON_WRITER_OK) {
+        goto cleanup;
+    }
+    
+cleanup:
+
+    if (serializedSource != NULL) {
+        free(serializedSource);
+    }
+    return result;
+}
+
+bool JsonObjectWriter_Compare(JsonObjectWriterHandle a, JsonObjectWriterHandle b) {
+    JsonObjectWriter* writerObjA = (JsonObjectWriter*)a;
+    JsonObjectWriter* writerObjB = (JsonObjectWriter*)b;
+
+    return json_value_equals(writerObjA->rootValue, writerObjB->rootValue);
+}

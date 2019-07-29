@@ -3,7 +3,9 @@
 
 #include "security_agent.h"
 
+#include "os_utils/system_logger.h"
 #include "agent_telemetry_provider.h"
+#include "iothub.h"
 #include "iothub_adapter.h"
 #include "local_config.h"
 #include "logger.h"
@@ -70,11 +72,26 @@ bool SecurityAgent_Init(SecurityAgent* agent) {
     bool success = true;
     memset(agent, 0, sizeof(*agent));
 
+    if (!Logger_Init()) {
+        success = false;
+        goto cleanup;
+    }
+    agent->loggerInitiated = true;
+    
+    if (IoTHub_Init() != 0) {
+        success = false;
+        goto cleanup;
+    }
+    agent->iothubInitiated = true;
+
     if (LocalConfiguration_Init() != LOCAL_CONFIGURATION_OK) {
         success = false;
         goto cleanup;
     }
     agent->localConfigurationInitiated = true;
+
+    Logger_SetMinimumSeverityForSystemLogger(LocalConfiguration_GetSystemLoggerMinimumSeverity());
+    Logger_SetMinimumSeverityForDiagnosticEvent(LocalConfiguration_GetDiagnosticEventMinimumSeverity());
 
     if (!MemoryMonitor_Init()) {
         success = false;
@@ -117,7 +134,6 @@ bool SecurityAgent_Init(SecurityAgent* agent) {
         goto cleanup;
     }
     agent->iothubAdapterInitiated = true;
-
 cleanup:
     if (!success) {
         SecurityAgent_Deinit(agent);
@@ -168,11 +184,19 @@ void SecurityAgent_Deinit(SecurityAgent* agent) {
     if (agent->localConfigurationInitiated) {
         LocalConfiguration_Deinit();
     }
+
+    if (agent->iothubInitiated) {
+        IoTHub_Deinit();
+    }
+
+    if (agent->loggerInitiated) {
+        Logger_Deinit();
+    }
 }
 
 bool SecurityAgent_Start(SecurityAgent* agent) {
       // init twin update task
-    if (!UpdateTwinTask_Init(&agent->updateTwinTask, &agent->queues.twinUpdatesQueue)) {
+    if (!UpdateTwinTask_Init(&agent->updateTwinTask, &agent->queues.twinUpdatesQueue, &agent->iothubAdapter)) {
         return false;
     }
     agent->asyncUpdateTwinTask.taskInitiated = true;
@@ -202,7 +226,7 @@ bool SecurityAgent_Start(SecurityAgent* agent) {
     if (!SecurityAgent_StartAsyncTask(&agent->asyncUpdateTwinTask, TWIN_UPDATE_SCHEDULER_INTERVAL, (SchedulerTask)UpdateTwinTask_Execute, &agent->updateTwinTask)) {
         return false;
     }
-
+    Logger_Information("ASC for IoT Agent initialized!");
     return true;
 }
 

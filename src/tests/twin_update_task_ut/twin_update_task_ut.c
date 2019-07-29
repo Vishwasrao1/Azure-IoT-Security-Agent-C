@@ -11,18 +11,19 @@
 #define ENABLE_MOCKS
 #include "synchronized_queue.h"
 #include "twin_configuration.h"
+#include "iothub_adapter.h"
 #undef ENABLE_MOCKS
 
 #include "tasks/update_twin_task.h"
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
     char temp_str[256];
-    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
 }
 
@@ -54,7 +55,7 @@ BEGIN_TEST_SUITE(twin_update_task_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -76,7 +77,7 @@ TEST_SUITE_CLEANUP(suite_cleanup)
 {
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     REGISTER_GLOBAL_MOCK_HOOK(SyncQueue_GetSize, NULL);
     REGISTER_GLOBAL_MOCK_HOOK(SyncQueue_PopFront, NULL);
@@ -91,9 +92,10 @@ TEST_FUNCTION(UpdateTwinTask_Init_ExpectSuccess)
 {
     UpdateTwinTask task;
     SyncQueue queue;
+    IoTHubAdapter client;
 
-    bool result = UpdateTwinTask_Init(&task, &queue);
-    ASSERT_IS_TRUE(result);
+    bool result = UpdateTwinTask_Init(&task, &queue, &client);
+ASSERT_IS_TRUE(result);
     ASSERT_ARE_EQUAL(void_ptr, &queue, task.updateQueue);
 }
 
@@ -101,8 +103,9 @@ TEST_FUNCTION(UpdateTwinTask_Deinit_ExpectSuccess)
 {
     UpdateTwinTask task;
     SyncQueue queue;
+    IoTHubAdapter client;
 
-    bool result = UpdateTwinTask_Init(&task, &queue);
+    bool result = UpdateTwinTask_Init(&task, &queue, &client);
     ASSERT_IS_TRUE(result);
     ASSERT_ARE_EQUAL(void_ptr, &queue, task.updateQueue);
 
@@ -115,8 +118,9 @@ TEST_FUNCTION(UpdateTwinTask_Execute_ExpectSuccess)
 {
     UpdateTwinTask task;
     SyncQueue queue;
+    IoTHubAdapter client;
 
-    bool result = UpdateTwinTask_Init(&task, &queue);
+    bool result = UpdateTwinTask_Init(&task, &queue, &client);
     ASSERT_IS_TRUE(result);
     ASSERT_ARE_EQUAL(void_ptr, &queue, task.updateQueue);
 
@@ -127,6 +131,8 @@ TEST_FUNCTION(UpdateTwinTask_Execute_ExpectSuccess)
     STRICT_EXPECTED_CALL(SyncQueue_PopFront(&queue, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
     mockedSyncQueuePopFrontTwinState = TWIN_COMPLETE;
     STRICT_EXPECTED_CALL(TwinConfiguration_Update(DUMMY_JSON, true));
+    STRICT_EXPECTED_CALL(TwinConfiguration_GetSerializedTwinConfiguration(IGNORED_PTR_ARG, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(IoTHubAdapter_SetReportedPropertiesAsync(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG));
 
     UpdateTwinTask_Execute(&task);
 
@@ -137,8 +143,9 @@ TEST_FUNCTION(UpdateTwinTask_ExecutePartialTwin_ExpectSuccess)
 {
     UpdateTwinTask task;
     SyncQueue queue;
+    IoTHubAdapter client;
 
-    bool result = UpdateTwinTask_Init(&task, &queue);
+    bool result = UpdateTwinTask_Init(&task, &queue, &client);
     ASSERT_IS_TRUE(result);
     ASSERT_ARE_EQUAL(void_ptr, &queue, task.updateQueue);
 
@@ -149,6 +156,8 @@ TEST_FUNCTION(UpdateTwinTask_ExecutePartialTwin_ExpectSuccess)
     STRICT_EXPECTED_CALL(SyncQueue_PopFront(&queue, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
     mockedSyncQueuePopFrontTwinState = TWIN_PARTIAL;
     STRICT_EXPECTED_CALL(TwinConfiguration_Update(DUMMY_JSON, false));
+    STRICT_EXPECTED_CALL(TwinConfiguration_GetSerializedTwinConfiguration(IGNORED_PTR_ARG, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(IoTHubAdapter_SetReportedPropertiesAsync(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG));
 
     UpdateTwinTask_Execute(&task);
 
@@ -159,8 +168,9 @@ TEST_FUNCTION(UpdateTwinTask_ExecuteQueueIsEmpty_ExpectSuccess)
 {
     UpdateTwinTask task;
     SyncQueue queue;
+    IoTHubAdapter client;
 
-    bool result = UpdateTwinTask_Init(&task, &queue);
+    bool result = UpdateTwinTask_Init(&task, &queue, &client);
     ASSERT_IS_TRUE(result);
     ASSERT_ARE_EQUAL(void_ptr, &queue, task.updateQueue);
 
@@ -177,8 +187,9 @@ TEST_FUNCTION(UpdateTwinTask_ExecutePopFrontReturnsQueueIsEmpty_ExpectSuccess)
 {
     UpdateTwinTask task;
     SyncQueue queue;
+    IoTHubAdapter client;
 
-    bool result = UpdateTwinTask_Init(&task, &queue);
+    bool result = UpdateTwinTask_Init(&task, &queue, &client);
     ASSERT_IS_TRUE(result);
     ASSERT_ARE_EQUAL(void_ptr, &queue, task.updateQueue);
 
@@ -197,8 +208,9 @@ TEST_FUNCTION(UpdateTwinTask_ExecuteUpdateTwinFailed_ExpectFailure)
 {
     UpdateTwinTask task;
     SyncQueue queue;
+    IoTHubAdapter client;
 
-    bool result = UpdateTwinTask_Init(&task, &queue);
+    bool result = UpdateTwinTask_Init(&task, &queue, &client);
     ASSERT_IS_TRUE(result);
     ASSERT_ARE_EQUAL(void_ptr, &queue, task.updateQueue);
 

@@ -10,37 +10,50 @@
 
 #ifdef DISABLE_LOGS
 
+#define Logger_Init() true
+#define Logger_Deinit()
 #define Logger_Debug(fmt, ...)
 #define Logger_Information(fmt, ...)
 #define Logger_Warning(fmt, ...)
 #define Logger_Error(fmt, ...)
 #define Logger_Fatal(fmt, ...)
 #define Logger_SetCorrelation()
+#define Logger_SetMinimumSeverityForSystemLogger(severity) true
+#define Logger_SetMinimumSeverityForDiagnosticEvent(severity) true
 
 #elif TEST_LOG
 
 #include <stdio.h>
 
+#define Logger_Init() true
+#define Logger_Deinit()
 #define Logger_Debug(fmt, ...)         printf("Debug: " fmt"\n", ##__VA_ARGS__);
 #define Logger_Information(fmt, ...)   printf("Information: " fmt"\n", ##__VA_ARGS__);
 #define Logger_Warning(fmt, ...)       printf("Warning: " fmt"\n", ##__VA_ARGS__);
 #define Logger_Error(fmt, ...)         printf("Error: " fmt"\n", ##__VA_ARGS__);
 #define Logger_Fatal(fmt, ...)         printf("Fatal: " fmt"\n", ##__VA_ARGS__);
+#define Logger_SetMinimumSeverityForSystemLogger(severity) true
+#define Logger_SetMinimumSeverityForDiagnosticEvent(severity) true
 
 #else
 
-void Logger_SendDiagnostic(Severity severity, const char *__restrict __fmt, ...);
+bool Logger_Init();
+void Logger_Deinit();
+void Logger_LogEvent(Severity severity, const char *__restrict __fmt, ...);
+bool Logger_SetMinimumSeverityForSystemLogger(int32_t severity);
+bool Logger_SetMinimumSeverityForDiagnosticEvent(int32_t severity);
 
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
-#define LOG_MAX_BUFF                    500
-#define Logger_Debug(fmt, ...)          Logger_SendDiagnostic(SEVERITY_DEBUG, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
-#define Logger_Warning(fmt, ...)        Logger_SendDiagnostic(SEVERITY_WARNING, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
-#define Logger_Information(fmt, ...)    Logger_SendDiagnostic(SEVERITY_INFORMATION, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
-#define Logger_Error(fmt, ...)          Logger_SendDiagnostic(SEVERITY_ERROR, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
-#define Logger_Fatal(fmt, ...)          Logger_SendDiagnostic(SEVERITY_FATAL, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
+#define Logger_Debug(fmt, ...)          Logger_LogEvent(SEVERITY_DEBUG, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
+#define Logger_Warning(fmt, ...)        Logger_LogEvent(SEVERITY_WARNING, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
+#define Logger_Information(fmt, ...)    Logger_LogEvent(SEVERITY_INFORMATION, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
+#define Logger_Error(fmt, ...)          Logger_LogEvent(SEVERITY_ERROR, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
+#define Logger_Fatal(fmt, ...)          Logger_LogEvent(SEVERITY_FATAL, "[%s] " fmt, __FILENAME__, ##__VA_ARGS__)
 #define Logger_SetCorrelation()         DiagnosticEventCollector_SetCorrelationId()
 
 #endif
+
+#define LOG_MAX_BUFF                    500
 
 #endif //LOGGER_H

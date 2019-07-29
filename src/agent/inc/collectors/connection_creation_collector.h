@@ -29,4 +29,9 @@ MOCKABLE_FUNCTION(, EventCollectorResult, ConnectionCreationEventCollector_GetEv
  */
 MOCKABLE_FUNCTION(, EventCollectorResult, ConnectionCreationEventCollector_Init);
 
+/**
+ * @brief deinitializes the connection event collector
+ */
+MOCKABLE_FUNCTION(, void, ConnectionCreationEventCollector_Deinit);
+
 #endif //CONNECTION_CREATION_COLLECTOR_H

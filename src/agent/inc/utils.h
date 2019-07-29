@@ -129,4 +129,15 @@ MOCKABLE_FUNCTION(, bool, Utils_AddUnsignedIntsWithOverflowCheck, uint32_t*, res
  */
 MOCKABLE_FUNCTION(, bool, Utils_CreateStringCopy, char**, newCopy, const char*, src);
 
+/**
+ * @brief   Converts Hex string to byte array
+ * 
+ * @param   hexString    Hex string to convert
+ * @param   buffer       Buffer for the converted byte array
+ * @param   bufferSize   In-Out param - the size of the buffer, returns with amount of bytes written
+ *
+ * @return true on success, false otherwise.
+ */
+MOCKABLE_FUNCTION(, bool, Utils_HexStringToByteArray, const char*, hexString, unsigned char*, buffer, uint32_t*, bufferSize);
+
 #endif //UTILS_H

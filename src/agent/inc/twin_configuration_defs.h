@@ -9,6 +9,7 @@
  */
 typedef enum _TwinConfigurationResult {
     TWIN_OK,
+    TWIN_CONF_NOT_EXIST,
     TWIN_LOCK_EXCEPTION,
     TWIN_PARSE_EXCEPTION,
     TWIN_MEMORY_EXCEPTION,
@@ -34,5 +35,20 @@ typedef struct _TwinConfigurationBundleStatus {
     TwinConfigurationStatus snapshotFrequency;
     TwinConfigurationStatus eventPriorities;
  } TwinConfigurationBundleStatus;
+
+ typedef enum _TwinConfigurationEventType {
+
+    EVENT_TYPE_BASELINE,
+    EVENT_TYPE_CONNECTION_CREATE,
+    EVENT_TYPE_FIREWALL_CONFIGURATION,
+    EVENT_TYPE_LISTENING_PORTS,
+    EVENT_TYPE_LOCAL_USERS,
+    EVENT_TYPE_PROCESS_CREATE,
+    EVENT_TYPE_SYSTEM_INFORMATION,
+    EVENT_TYPE_USER_LOGIN,
+    EVENT_TYPE_DIAGNOSTIC,
+    EVENT_TYPE_OPERATIONAL_EVENT
+
+} TwinConfigurationEventType;
 
 #endif //TWIN_CONFIGURATION_DEFS_H

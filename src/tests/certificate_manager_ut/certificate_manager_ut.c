@@ -11,6 +11,7 @@
 #include "openssl_mock.h"
 #include "std_mocks.h"
 #include "utils.h"
+#include "os_utils/file_utils.h"
 #undef ENABLE_MOCKS
 
 #include "certificate_manager.h"
@@ -24,12 +25,12 @@ static size_t MOCKED_BUFFER_LENGTH = 10;
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
     char temp_str[256];
-    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
 }
 
@@ -44,11 +45,21 @@ int Mocked_PKCS12_parse(PKCS12 *p12, const char *pass, EVP_PKEY **pkey, X509 **c
     return 1;
 }
 
+FileResults Mocked_OpenFile(const char* filePath, const char* mode, FILE** outFile) {
+    if (strcmp(filePath, "file.pem") == 0 || strcmp(filePath, "file.pfx") == 0) {
+            *outFile = MOCKED_FILE;
+            return FILE_UTILS_OK;
+    }
+
+    *outFile = NULL;
+    return FILE_UTILS_ERROR;
+}
+
 BEGIN_TEST_SUITE(certificate_manager_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -57,17 +68,20 @@ TEST_SUITE_INITIALIZE(suite_init)
     REGISTER_UMOCK_ALIAS_TYPE(uint32_t, unsigned int);
     umocktypes_bool_register_types();
     umocktypes_charptr_register_types();
+    REGISTER_UMOCK_ALIAS_TYPE(FileResults, int);
     REGISTER_GLOBAL_MOCK_HOOK(d2i_PKCS12_fp, Mocked_d2i_PKCS12_fp);
     REGISTER_GLOBAL_MOCK_HOOK(PKCS12_parse, Mocked_PKCS12_parse);
+    REGISTER_GLOBAL_MOCK_HOOK(FileUtils_OpenFile, Mocked_OpenFile);
 }
 
 TEST_SUITE_CLEANUP(suite_cleanup)
 {
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
     REGISTER_GLOBAL_MOCK_HOOK(d2i_PKCS12_fp, NULL);
     REGISTER_GLOBAL_MOCK_HOOK(PKCS12_parse, NULL);
+    REGISTER_GLOBAL_MOCK_HOOK(FileUtils_OpenFile, NULL);
 }
 
 
@@ -78,8 +92,8 @@ TEST_FUNCTION_INITIALIZE(method_init)
 
 TEST_FUNCTION(CertificateManager_LoadPemFromFile_expectSuccess)
 {
-    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, ".pem", false)).SetReturn(true);
-    STRICT_EXPECTED_CALL(fopen("file.pem", "rb")).SetReturn(MOCKED_FILE);
+    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, ".pem", false)).SetReturn(true);   
+    STRICT_EXPECTED_CALL(FileUtils_OpenFile(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_PTR_ARG)); 
     
     STRICT_EXPECTED_CALL(PEM_read_X509(IGNORED_PTR_ARG, NULL, NULL, NULL)).SetReturn(MOCKED_X509);
     STRICT_EXPECTED_CALL(BIO_s_mem());
@@ -115,7 +129,7 @@ TEST_FUNCTION(CertificateManager_LoadPKCS12FromFile_expectSuccess)
     STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, ".pem", false)).SetReturn(false);
     STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, ".pfx", false)).SetReturn(true);
     
-    STRICT_EXPECTED_CALL(fopen("file.pfx", "rb")).SetReturn(MOCKED_FILE);
+    STRICT_EXPECTED_CALL(FileUtils_OpenFile(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(d2i_PKCS12_fp(MOCKED_FILE, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(PKCS12_parse(IGNORED_PTR_ARG, NULL, IGNORED_PTR_ARG, IGNORED_PTR_ARG, NULL));
     

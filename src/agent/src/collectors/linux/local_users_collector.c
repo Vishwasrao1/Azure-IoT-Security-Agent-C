@@ -132,7 +132,7 @@ static bool LocalUsersCollector_GenerateGroupNamesAndIds(GroupsIteratorHandle gr
         } 
     }
 
-    return true;
+        return true;
 }
 
 static bool LocalUsersCollector_AddGroupsForUser(UsersIteratorHandle usersIterator, JsonObjectWriterHandle parentObj) { 
@@ -214,7 +214,15 @@ static bool LocalUsersCollector_AddSingleUser(UsersIteratorHandle usersIterator,
         goto cleanup;
     }
 
-    if (JsonObjectWriter_WriteInt(userObject, LOCAL_USERS_USER_ID_KEY, UsersIterator_GetUserId(usersIterator)) != JSON_WRITER_OK) {
+    char userIdStr[11] = {0};
+    int32_t userIdStrSize = sizeof(userIdStr);
+    if(UsersIterator_GetUserId(usersIterator, userIdStr, &userIdStrSize) != USER_ITERATOR_OK)
+    {
+        success = false;
+        goto cleanup;
+    }
+
+    if (JsonObjectWriter_WriteString(userObject, LOCAL_USERS_USER_ID_KEY, userIdStr) != JSON_WRITER_OK) {
         success = false;
         goto cleanup;
     }   

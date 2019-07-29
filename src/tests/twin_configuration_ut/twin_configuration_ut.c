@@ -16,7 +16,9 @@
 #include "internal/time_utils.h"
 #include "json/json_object_reader.h"
 #include "json/json_object_writer.h"
-#include "twin_configuration_event_priorities.h"
+#include "local_config.h"
+#include "twin_configuration_event_collectors.h"
+#include "twin_configuration_utils.h"
 #undef ENABLE_MOCKS
 
 static const LOCK_HANDLE TEST_LOCK_HANDLE = (LOCK_HANDLE)0x4443;
@@ -32,12 +34,12 @@ static int dummyTime = 10000;
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
     char temp_str[256];
-    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
 }
 
@@ -110,18 +112,16 @@ static void ValidateTwinConfigurationUpdate(bool isComplete, bool injectUnlockEr
         STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, "desired"));
     }
 
-    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, AGENT_CONFIGURATION_KEY));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(mockedReader, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_OK);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(mockedReader, MAX_MESSAGE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_OK);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_OK);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_OK);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, SNAPSHOT_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_OK);
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationUintValueFromJson(mockedReader, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationUintValueFromJson(mockedReader, MAX_MESSAGE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, SNAPSHOT_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
 
     int expectedUpdateResult = TWIN_OK;
     STRICT_EXPECTED_CALL(Lock(IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadObject(mockedReader, EVENT_PROPERTIES_KEY, IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_Update(IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
-    STRICT_EXPECTED_CALL(JsonObjectReader_Deinit(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_Update(IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
     STRICT_EXPECTED_CALL(TimeUtils_GetCurrentTime()).SetReturn(dummyTime);
     STRICT_EXPECTED_CALL(JsonObjectReader_Deinit(mockedReader));
 
@@ -146,7 +146,7 @@ BEGIN_TEST_SUITE(twin_configuration_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -189,7 +189,7 @@ TEST_SUITE_CLEANUP(suite_cleanup)
 
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 }
 
 TEST_FUNCTION_INITIALIZE(method_init)
@@ -208,7 +208,8 @@ TEST_FUNCTION_CLEANUP(method_cleanup)
 TEST_FUNCTION(TwinConfiguration_Init_ExpectSuccess)
 {
     STRICT_EXPECTED_CALL(Lock_Init());
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_Init()).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(LocalConfiguration_GetRemoteConfigurationObjectName()).SetReturn("conf");
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_Init()).SetReturn(TWIN_OK);
     
     int result = TwinConfiguration_Init();
     ASSERT_ARE_EQUAL(int, TWIN_OK, result);
@@ -231,7 +232,8 @@ TEST_FUNCTION(TwinConfiguration_Init_LockFailed_ExpectFailure)
 TEST_FUNCTION(TwinConfiguration_Init_InitEventPrioritiesFailed_ExpectFailure)
 {
     STRICT_EXPECTED_CALL(Lock_Init());
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_Init()).SetReturn(TWIN_EXCEPTION);
+    STRICT_EXPECTED_CALL(LocalConfiguration_GetRemoteConfigurationObjectName()).SetReturn("conf");
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_Init()).SetReturn(TWIN_EXCEPTION);
     STRICT_EXPECTED_CALL(Lock_Deinit(IGNORED_PTR_ARG));
     
     int result = TwinConfiguration_Init();
@@ -255,17 +257,15 @@ TEST_FUNCTION(TwinConfiguration_AllJsonKeysMissing_ExpectDefaultValuesFallback)
 {
     STRICT_EXPECTED_CALL(JsonObjectReader_InitFromString(IGNORED_PTR_ARG, DUMMY_STRING));
     STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, "desired"));
-    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, AGENT_CONFIGURATION_KEY));
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, IGNORED_PTR_ARG));
 
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(mockedReader, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(mockedReader, MAX_MESSAGE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, SNAPSHOT_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationUintValueFromJson(mockedReader, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationUintValueFromJson(mockedReader, MAX_MESSAGE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, SNAPSHOT_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
     STRICT_EXPECTED_CALL(Lock(IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadObject(mockedReader, EVENT_PROPERTIES_KEY, IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_Update(IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
-    STRICT_EXPECTED_CALL(JsonObjectReader_Deinit(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_Update(IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
     STRICT_EXPECTED_CALL(TimeUtils_GetCurrentTime()).SetReturn(0);
     STRICT_EXPECTED_CALL(JsonObjectReader_Deinit(mockedReader));
 
@@ -339,14 +339,14 @@ TEST_FUNCTION(TwinConfiguration_UpdateWithLockError_ExpectLockException)
     char* string;
     STRICT_EXPECTED_CALL(JsonObjectReader_InitFromString(IGNORED_PTR_ARG, DUMMY_JSON));
     STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, "desired"));
-    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, AGENT_CONFIGURATION_KEY));
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(mockedReader, IGNORED_PTR_ARG));
 
 
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(mockedReader, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(mockedReader, MAX_MESSAGE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(mockedReader, SNAPSHOT_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_KEY_MISSING);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationUintValueFromJson(mockedReader, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationUintValueFromJson(mockedReader, MAX_MESSAGE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_GetConfigurationTimeValueFromJson(mockedReader, SNAPSHOT_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(TWIN_CONF_NOT_EXIST);
     STRICT_EXPECTED_CALL(Lock(IGNORED_PTR_ARG)).SetReturn(LOCK_ERROR).IgnoreAllArguments();
     STRICT_EXPECTED_CALL(TimeUtils_GetCurrentTime()).SetReturn(0);
     STRICT_EXPECTED_CALL(JsonObjectReader_Deinit(mockedReader));
@@ -376,37 +376,39 @@ TEST_FUNCTION(TwinConfiguration_TestGetLastTwinUpdateDataExpectSuccess){
     ASSERT_ARE_EQUAL(int, CONFIGURATION_OK, result.configurationBundleStatus.snapshotFrequency);
 }
 
-TEST_FUNCTION(TwinConfiguration_TestGetSerializeTwinConfiguratioExpectSuccess) {
+TEST_FUNCTION(TwinConfiguration_TestGetSerializedwinConfiguratioExpectSuccess) {
     
     umock_c_reset_all_calls();
     uint32_t outSize;
     char* out;
     STRICT_EXPECTED_CALL(Lock(IGNORED_PTR_ARG)).SetReturn(LOCK_OK);
     STRICT_EXPECTED_CALL(JsonObjectWriter_Init(IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectWriter_WriteInt(IGNORED_PTR_ARG, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_NUM_ARG)).SetReturn(JSON_WRITER_OK);
-    STRICT_EXPECTED_CALL(JsonObjectWriter_WriteInt(IGNORED_PTR_ARG, MAX_MESSAGE_SIZE_KEY, IGNORED_NUM_ARG)).SetReturn(JSON_WRITER_OK);
-    STRICT_EXPECTED_CALL(TimeUtils_MillisecondsToISO8601DurationString(IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
-    STRICT_EXPECTED_CALL(JsonObjectWriter_WriteString(IGNORED_PTR_ARG, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_NUM_ARG)).SetReturn(JSON_WRITER_OK);
-    STRICT_EXPECTED_CALL(TimeUtils_MillisecondsToISO8601DurationString(IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
-    STRICT_EXPECTED_CALL(JsonObjectWriter_WriteString(IGNORED_PTR_ARG, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_NUM_ARG)).SetReturn(JSON_WRITER_OK);
-    STRICT_EXPECTED_CALL(TimeUtils_MillisecondsToISO8601DurationString(IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
-    STRICT_EXPECTED_CALL(JsonObjectWriter_WriteString(IGNORED_PTR_ARG, SNAPSHOT_FREQUENCY_KEY, IGNORED_NUM_ARG)).SetReturn(JSON_WRITER_OK);
     STRICT_EXPECTED_CALL(JsonObjectWriter_Init(IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPrioritiesJson(IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
-    STRICT_EXPECTED_CALL(JsonObjectWriter_WriteObject(IGNORED_PTR_ARG, EVENT_PROPERTIES_KEY, IGNORED_NUM_ARG)).SetReturn(JSON_WRITER_OK);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_WriteUintConfigurationToJson(IGNORED_PTR_ARG, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_NUM_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_WriteUintConfigurationToJson(IGNORED_PTR_ARG, MAX_MESSAGE_SIZE_KEY, IGNORED_NUM_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TimeUtils_MillisecondsToISO8601DurationString(IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_WriteStringConfigurationToJson(IGNORED_PTR_ARG, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_NUM_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TimeUtils_MillisecondsToISO8601DurationString(IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_WriteStringConfigurationToJson(IGNORED_PTR_ARG, LOW_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_NUM_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TimeUtils_MillisecondsToISO8601DurationString(IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
+    STRICT_EXPECTED_CALL(TwinConfigurationUtils_WriteStringConfigurationToJson(IGNORED_PTR_ARG, SNAPSHOT_FREQUENCY_KEY, IGNORED_NUM_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPrioritiesJson(IGNORED_PTR_ARG)).SetReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(JsonObjectWriter_WriteObject(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(JSON_WRITER_OK);
     STRICT_EXPECTED_CALL(JsonObjectWriter_Serialize(IGNORED_PTR_ARG, &out, &outSize));
+    STRICT_EXPECTED_CALL(JsonObjectWriter_Deinit(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectWriter_Deinit(IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(Unlock(IGNORED_PTR_ARG)).SetReturn(LOCK_OK);
-    STRICT_EXPECTED_CALL(JsonObjectWriter_Deinit(IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectWriter_Deinit(IGNORED_PTR_ARG));
 
-    TwinConfigurationResult result = TwinConfiguration_GetSerializetTwinConfiguration(&out, &outSize);
+    TwinConfigurationResult result = TwinConfiguration_GetSerializedTwinConfiguration(&out, &outSize);
+        ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
     ASSERT_ARE_EQUAL(int, TWIN_OK, result);
     ASSERT_ARE_EQUAL(int, 10, outSize);
     ASSERT_IS_TRUE(strcmp("123456789", out) == 0);
     ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
 }
 
-TEST_FUNCTION(TwinConfiguration_TestGetSerializeTwinConfiguratioExpectFail) {
+TEST_FUNCTION(TwinConfiguration_TestGetSerializedwinConfiguratioExpectFail) {
     
     umock_c_negative_tests_init();
     uint32_t outSize;
@@ -422,7 +424,7 @@ TEST_FUNCTION(TwinConfiguration_TestGetSerializeTwinConfiguratioExpectFail) {
     STRICT_EXPECTED_CALL(TimeUtils_MillisecondsToISO8601DurationString(IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetFailReturn(true);
     STRICT_EXPECTED_CALL(JsonObjectWriter_WriteString(IGNORED_PTR_ARG, SNAPSHOT_FREQUENCY_KEY, IGNORED_NUM_ARG)).SetFailReturn(JSON_WRITER_EXCEPTION);
     STRICT_EXPECTED_CALL(JsonObjectWriter_Init(IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(TwinConfigurationEventPriorities_GetPrioritiesJson(IGNORED_PTR_ARG)).SetFailReturn(TWIN_OK);
+    STRICT_EXPECTED_CALL(TwinConfigurationEventCollectors_GetPrioritiesJson(IGNORED_PTR_ARG)).SetFailReturn(TWIN_OK);
     STRICT_EXPECTED_CALL(JsonObjectWriter_WriteObject(IGNORED_PTR_ARG, EVENT_PROPERTIES_KEY, IGNORED_NUM_ARG)).SetFailReturn(JSON_WRITER_EXCEPTION);
     STRICT_EXPECTED_CALL(JsonObjectWriter_Serialize(IGNORED_PTR_ARG, &out, &outSize));
     STRICT_EXPECTED_CALL(Unlock(IGNORED_PTR_ARG)).SetFailReturn(LOCK_ERROR);
@@ -436,7 +438,7 @@ TEST_FUNCTION(TwinConfiguration_TestGetSerializeTwinConfiguratioExpectFail) {
         umock_c_negative_tests_reset();
         umock_c_negative_tests_fail_call(i);
 
-        TwinConfigurationResult result = TwinConfiguration_GetSerializetTwinConfiguration(&out, &outSize);
+        TwinConfigurationResult result = TwinConfiguration_GetSerializedTwinConfiguration(&out, &outSize);
         ASSERT_IS_TRUE(TWIN_OK != result);
     }
 
@@ -453,7 +455,7 @@ TEST_FUNCTION(TwinConfiguration_Update_MalformedJson_ConfigStayIntact){
     JsonObjectReaderHandle readerHandle;
     STRICT_EXPECTED_CALL(JsonObjectReader_InitFromString(&readerHandle, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(readerHandle, "desired"));
-    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(readerHandle, AGENT_CONFIGURATION_KEY));
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(readerHandle, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(readerHandle, MAX_LOCAL_CACHE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_PARSE_ERROR);
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(readerHandle, MAX_MESSAGE_SIZE_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_PARSE_ERROR);
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(readerHandle, HIGH_PRIORITY_MESSAGE_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_PARSE_ERROR);
@@ -461,7 +463,7 @@ TEST_FUNCTION(TwinConfiguration_Update_MalformedJson_ConfigStayIntact){
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(readerHandle, SNAPSHOT_FREQUENCY_KEY, IGNORED_PTR_ARG)).SetReturn(JSON_READER_PARSE_ERROR);
     STRICT_EXPECTED_CALL(JsonObjectReader_Deinit(readerHandle));
 
-    result = TwinConfigurationEventPriorities_Update(readerHandle);
+    result = TwinConfigurationEventCollectors_Update(readerHandle);
     ASSERT_ARE_EQUAL(int, TWIN_OK, result);
     
     ValidateDefaultTwinConfigurationParameters();

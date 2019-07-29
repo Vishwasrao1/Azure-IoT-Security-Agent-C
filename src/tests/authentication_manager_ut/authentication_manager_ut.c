@@ -28,7 +28,7 @@
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static HTTP_HEADERS_HANDLE MOCKED_HTTP_HEADERS_HANDLE = (HTTP_HEADERS_HANDLE)0x59;
 static HTTP_HANDLE MOCKED_HTTP_HANDLE = (HTTP_HANDLE)0x58;
@@ -47,7 +47,7 @@ void Mocked_HTTPAPIEX_SAS_Destroy(HTTPAPIEX_SAS_HANDLE handle) {
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
     char temp_str[256];
-    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
 }
 
@@ -83,7 +83,7 @@ BEGIN_TEST_SUITE(authentication_manager_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -124,7 +124,7 @@ TEST_SUITE_CLEANUP(suite_cleanup)
     REGISTER_GLOBAL_MOCK_HOOK(HTTPAPIEX_SAS_Destroy, NULL);
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 }
 
 TEST_FUNCTION_INITIALIZE(method_init)
@@ -146,10 +146,11 @@ TEST_FUNCTION(AuthenticationManager_InitWithCertificate_ExcpectSuccess)
     STRICT_EXPECTED_CALL(Utils_CopyString("hostName", IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(Utils_CopyString("device", IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
 
+    STRICT_EXPECTED_CALL(BUFFER_new()).SetReturn(MOCKED_BUFFER_HANDLE);
+
     STRICT_EXPECTED_CALL(HTTPHeaders_Alloc()).SetReturn(MOCKED_HTTP_HEADERS_HANDLE);
     STRICT_EXPECTED_CALL(HTTPAPI_Init());
     STRICT_EXPECTED_CALL(HTTPAPI_CreateConnection(IGNORED_PTR_ARG)).SetReturn(MOCKED_HTTP_HANDLE);
-    STRICT_EXPECTED_CALL(BUFFER_new()).SetReturn(MOCKED_BUFFER_HANDLE);
 
     STRICT_EXPECTED_CALL(HTTPAPI_SetOption(IGNORED_PTR_ARG, SU_OPTION_X509_CERT, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(HTTPAPI_SetOption(IGNORED_PTR_ARG, SU_OPTION_X509_PRIVATE_KEY, IGNORED_PTR_ARG));
@@ -164,14 +165,13 @@ TEST_FUNCTION(AuthenticationManager_InitWithCertificate_ExcpectSuccess)
                                                 NULL, 
                                                 IGNORED_PTR_ARG));
 
-    STRICT_EXPECTED_CALL(BUFFER_u_char(IGNORED_PTR_ARG));
-
-    STRICT_EXPECTED_CALL(JsonObjectReader_InitFromString(IGNORED_PTR_ARG, IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "authentication.symmetricKey.primaryKey",IGNORED_PTR_ARG));
-
     STRICT_EXPECTED_CALL(HTTPHeaders_Free(IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(HTTPAPI_CloseConnection(IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(HTTPAPI_Deinit());
+    
+    STRICT_EXPECTED_CALL(BUFFER_u_char(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_InitFromString(IGNORED_PTR_ARG, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "authentication.symmetricKey.primaryKey",IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(BUFFER_delete(IGNORED_PTR_ARG));
 
     bool result = AuthenticationManager_InitFromCertificate("someFilePath", "hostName", "device");
@@ -190,12 +190,13 @@ TEST_FUNCTION(AuthenticationManager_InitWithKey_ExcpectSuccess)
     STRICT_EXPECTED_CALL(FileUtils_ReadFile("filePath", IGNORED_PTR_ARG, IGNORED_NUM_ARG, true));
     STRICT_EXPECTED_CALL(Utils_CopyString("hostName", IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(Utils_CopyString("deviceId", IGNORED_NUM_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG)).SetReturn(true);
-    STRICT_EXPECTED_CALL(HTTPAPIEX_SAS_Create_From_String(IGNORED_PTR_ARG, IGNORED_PTR_ARG, NULL));
+
+    STRICT_EXPECTED_CALL(BUFFER_new()).SetReturn(MOCKED_BUFFER_HANDLE);
 
     STRICT_EXPECTED_CALL(HTTPHeaders_Alloc()).SetReturn(MOCKED_HTTP_HEADERS_HANDLE);
     STRICT_EXPECTED_CALL(HTTPHeaders_AddHeaderNameValuePair(MOCKED_HTTP_HEADERS_HANDLE, "Authorization", ""));
     STRICT_EXPECTED_CALL(HTTPAPIEX_Create(IGNORED_PTR_ARG)).SetReturn(MOCKED_HTTPAPIEX_HANDLE);
-    STRICT_EXPECTED_CALL(BUFFER_new()).SetReturn(MOCKED_BUFFER_HANDLE);
+    STRICT_EXPECTED_CALL(HTTPAPIEX_SAS_Create_From_String(IGNORED_PTR_ARG, IGNORED_PTR_ARG, NULL));
 
     STRICT_EXPECTED_CALL(HTTPAPIEX_SAS_ExecuteRequest(  IGNORED_PTR_ARG,
                                                         IGNORED_PTR_ARG, 
@@ -207,13 +208,13 @@ TEST_FUNCTION(AuthenticationManager_InitWithKey_ExcpectSuccess)
                                                         NULL, 
                                                         IGNORED_PTR_ARG));
 
-    STRICT_EXPECTED_CALL(BUFFER_u_char(IGNORED_PTR_ARG));
-
-    STRICT_EXPECTED_CALL(JsonObjectReader_InitFromString(IGNORED_PTR_ARG, IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "authentication.symmetricKey.primaryKey",IGNORED_PTR_ARG));
-
+    STRICT_EXPECTED_CALL(HTTPAPIEX_SAS_Destroy(IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(HTTPHeaders_Free(IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(HTTPAPIEX_Destroy(IGNORED_PTR_ARG));
+
+    STRICT_EXPECTED_CALL(BUFFER_u_char(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_InitFromString(IGNORED_PTR_ARG, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "authentication.symmetricKey.primaryKey",IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(BUFFER_delete(IGNORED_PTR_ARG));
 
     bool result = AuthenticationManager_InitFromSharedAccessKey("filePath","hostName","deviceId");
