@@ -14,6 +14,7 @@ set(${theseTestsName}_test_files
 )
 
 set(${theseTestsName}_c_files
+    ../../agent/src/agent_errors.c
     ../../agent/src/local_config.c
     ../../agent/src/consts.c
 )

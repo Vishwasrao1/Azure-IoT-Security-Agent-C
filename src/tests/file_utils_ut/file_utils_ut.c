@@ -17,25 +17,26 @@
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
     char temp_str[256];
-    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
 }
 
 static const int WRITE_CREATE_TRUNC_FLAG = 1 | 64 | 512;
 static const int READ_FLAG = 0;
 static const char* FILE_PATH = "aaa/bbb/ccc/d.txt";
+static const char* OPEN_MODE = "rb";
 
 
 BEGIN_TEST_SUITE(file_utils_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -52,7 +53,7 @@ TEST_SUITE_CLEANUP(suite_cleanup)
 {
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 }
 
 TEST_FUNCTION_INITIALIZE(method_init)
@@ -191,6 +192,44 @@ TEST_FUNCTION(FileUtils_ReadFile_ReadPartial_ExpectFailure)
     FileResults result = FileUtils_ReadFile(FILE_PATH, data, dataLen, false);
 
     ASSERT_ARE_EQUAL(int, FILE_UTILS_SIZE_MISMATCH, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+TEST_FUNCTION(FileUtils_OpenFile_ExpecteSuccess)
+{
+    FILE* expectedFile = (FILE*)0x10;
+    STRICT_EXPECTED_CALL(fopen(FILE_PATH, OPEN_MODE)).SetReturn(expectedFile);
+    
+    FILE* actualFile; 
+    FileResults result = FileUtils_OpenFile(FILE_PATH, OPEN_MODE, &actualFile);
+
+    ASSERT_ARE_EQUAL(int, FILE_UTILS_OK, result);
+    ASSERT_IS_TRUE(actualFile == expectedFile);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+
+TEST_FUNCTION(FileUtils_OpenFile_FileNotExist_ExpectFail)
+{
+    STRICT_EXPECTED_CALL(fopen(FILE_PATH, OPEN_MODE)).SetReturn(NULL);
+    
+    FILE* actualFile; 
+    errno = ENOENT;
+    FileResults result = FileUtils_OpenFile(FILE_PATH, OPEN_MODE, &actualFile);
+
+    ASSERT_ARE_EQUAL(int, FILE_UTILS_FILE_NOT_FOUND, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+TEST_FUNCTION(FileUtils_OpenFile_FileNotAccesible_ExpectFail)
+{
+    STRICT_EXPECTED_CALL(fopen(FILE_PATH, OPEN_MODE)).SetReturn(NULL);
+    
+    FILE* actualFile; 
+    errno = EACCES;
+    FileResults result = FileUtils_OpenFile(FILE_PATH, OPEN_MODE, &actualFile);
+
+    ASSERT_ARE_EQUAL(int, FILE_UTILS_NOPERM, result);
     ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
 }
 

@@ -28,12 +28,12 @@ char* Mocked_GetExecutableDirectory() {
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
     char temp_str[256];
-    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
 }
 
@@ -58,7 +58,7 @@ BEGIN_TEST_SUITE(local_config_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -85,7 +85,7 @@ TEST_SUITE_CLEANUP(suite_cleanup)
     REGISTER_GLOBAL_MOCK_HOOK(FileUtils_ReadFile, NULL);
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 }
 
 TEST_FUNCTION_INITIALIZE(method_init)
@@ -102,19 +102,30 @@ TEST_FUNCTION(LocalConfiguration_InitJsonAndValidateSecurityModuleKeyAuthenticat
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "AgentId", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(IGNORED_PTR_ARG, "TriggerdEventsInterval", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(IGNORED_PTR_ARG, "ConnectionTimeout", IGNORED_PTR_ARG));    
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "RemoteConfigurationObjectName", IGNORED_PTR_ARG));    
+    STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(IGNORED_PTR_ARG, "Authentication"));
 
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "DeviceId", IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "HostName", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "AuthenticationMethod", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "Identity", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "FilePath", IGNORED_PTR_ARG));
 
+    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "DPS", true)).SetReturn(false);
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "HostName", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "DeviceId", IGNORED_PTR_ARG));
+
+    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "Device", true)).SetReturn(false);
     STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "SecurityModule", true)).SetReturn(true);
-    
+    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "SasToken", true)).SetReturn(true);
     STRICT_EXPECTED_CALL(FileUtils_ReadFile(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_NUM_ARG, true));
     STRICT_EXPECTED_CALL(AuthenticationManager_GenerateConnectionStringFromSharedAccessKey(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
+
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepOut(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(IGNORED_PTR_ARG, "Logging"));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(IGNORED_PTR_ARG, "SystemLoggerMinimumSeverity", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(IGNORED_PTR_ARG, "DiagnoticEventMinimumSeverity", IGNORED_PTR_ARG));
 
     int result = LocalConfiguration_Init();
     ASSERT_ARE_EQUAL(int, LOCAL_CONFIGURATION_OK, result);
@@ -132,15 +143,19 @@ TEST_FUNCTION(LocalConfiguration_InitJsonAndValidateDeviceKeyAuthentication_Expe
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "AgentId", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(IGNORED_PTR_ARG, "TriggerdEventsInterval", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(IGNORED_PTR_ARG, "ConnectionTimeout", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "RemoteConfigurationObjectName", IGNORED_PTR_ARG)); 
+    STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);   
     STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(IGNORED_PTR_ARG, "Authentication"));
 
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "DeviceId", IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "HostName", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "AuthenticationMethod", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "Identity", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "FilePath", IGNORED_PTR_ARG));
 
-    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "SecurityModule", true)).SetReturn(false);
+    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "DPS", true)).SetReturn(false);
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "HostName", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "DeviceId", IGNORED_PTR_ARG));
+
     STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "Device", true)).SetReturn(true);
     
     STRICT_EXPECTED_CALL(AuthenticationManager_Init()).SetReturn(true);;
@@ -149,7 +164,11 @@ TEST_FUNCTION(LocalConfiguration_InitJsonAndValidateDeviceKeyAuthentication_Expe
     STRICT_EXPECTED_CALL(AuthenticationManager_InitFromSharedAccessKey(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(AuthenticationManager_GetConnectionString(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
-    STRICT_EXPECTED_CALL(AuthenticationManager_Deinit());
+
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepOut(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(IGNORED_PTR_ARG, "Logging"));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(IGNORED_PTR_ARG, "SystemLoggerMinimumSeverity", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(IGNORED_PTR_ARG, "DiagnoticEventMinimumSeverity", IGNORED_PTR_ARG));
 
     int result = LocalConfiguration_Init();
     ASSERT_ARE_EQUAL(int, LOCAL_CONFIGURATION_OK, result);
@@ -168,16 +187,19 @@ TEST_FUNCTION(LocalConfiguration_InitJsonAndValidateDeviceCertificateAuthenticat
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "AgentId", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(IGNORED_PTR_ARG, "TriggerdEventsInterval", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(IGNORED_PTR_ARG, "ConnectionTimeout", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "RemoteConfigurationObjectName", IGNORED_PTR_ARG));  
+    STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);  
     STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(IGNORED_PTR_ARG, "Authentication"));
-
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "DeviceId", IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "HostName", IGNORED_PTR_ARG));
 
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "AuthenticationMethod", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "Identity", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "FilePath", IGNORED_PTR_ARG));
 
-    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "SecurityModule", true)).SetReturn(false);
+    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "DPS", true)).SetReturn(false);
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "HostName", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "DeviceId", IGNORED_PTR_ARG));
+
     STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "Device", true)).SetReturn(true);
     
     STRICT_EXPECTED_CALL(AuthenticationManager_Init()).SetReturn(true);;
@@ -187,7 +209,11 @@ TEST_FUNCTION(LocalConfiguration_InitJsonAndValidateDeviceCertificateAuthenticat
     STRICT_EXPECTED_CALL(AuthenticationManager_InitFromCertificate(IGNORED_PTR_ARG, IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(AuthenticationManager_GetConnectionString(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
-    STRICT_EXPECTED_CALL(AuthenticationManager_Deinit());
+
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepOut(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(IGNORED_PTR_ARG, "Logging"));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(IGNORED_PTR_ARG, "SystemLoggerMinimumSeverity", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadInt(IGNORED_PTR_ARG, "DiagnoticEventMinimumSeverity", IGNORED_PTR_ARG));
 
     int result = LocalConfiguration_Init();
     ASSERT_ARE_EQUAL(int, LOCAL_CONFIGURATION_OK, result);
@@ -206,22 +232,27 @@ TEST_FUNCTION(LocalConfiguration_InitJsonAndValidateDeviceNonExistingAuthenticat
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "AgentId", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(IGNORED_PTR_ARG, "TriggerdEventsInterval", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadTimeInMilliseconds(IGNORED_PTR_ARG, "ConnectionTimeout", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "RemoteConfigurationObjectName", IGNORED_PTR_ARG)); 
+    STRICT_EXPECTED_CALL(Utils_CreateStringCopy(IGNORED_PTR_ARG, IGNORED_PTR_ARG)).SetReturn(true);   
     STRICT_EXPECTED_CALL(JsonObjectReader_StepIn(IGNORED_PTR_ARG, "Authentication"));
 
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "DeviceId", IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "HostName", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "AuthenticationMethod", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "Identity", IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "FilePath", IGNORED_PTR_ARG));
 
-    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "SecurityModule", true)).SetReturn(false);
+    STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "DPS", true)).SetReturn(false);
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "HostName", IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(JsonObjectReader_ReadString(IGNORED_PTR_ARG, "DeviceId", IGNORED_PTR_ARG));
+
     STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "Device", true)).SetReturn(true);
     
     STRICT_EXPECTED_CALL(AuthenticationManager_Init()).SetReturn(true);;
     STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "SasToken", true)).SetReturn(false);
     STRICT_EXPECTED_CALL(Utils_UnsafeAreStringsEqual(IGNORED_PTR_ARG, "SelfSignedCertificate", true)).SetReturn(false);
-    STRICT_EXPECTED_CALL(AuthenticationManager_Deinit());
 
+    STRICT_EXPECTED_CALL(AuthenticationManager_Deinit());
+    
     int result = LocalConfiguration_Init();
     ASSERT_ARE_EQUAL(int, LOCAL_CONFIGURATION_EXCEPTION, result);
 

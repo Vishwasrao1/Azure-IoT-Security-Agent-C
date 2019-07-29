@@ -395,7 +395,7 @@ EventCollectorResult FirewallCollector_WriteRuleDirectionAndChainElements(JsonOb
         direction = FIREWALL_DIRECTION_OUT;
     }
 
-    if (chainName != NULL) {
+    if (direction != NULL) {
         if (JsonObjectWriter_WriteString(ruleWriter, FIREWALL_RULES_DIRECTION_KEY, direction) != JSON_WRITER_OK) { 
             return EVENT_COLLECTOR_EXCEPTION;
         }

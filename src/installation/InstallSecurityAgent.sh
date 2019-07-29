@@ -20,7 +20,24 @@ _hostName=
 
 usage()
 {
-    echo "usage: InstallSecurityAgent [[-aui <authentication identity> ] [[-aum <authentication method> ] [[-f <file path> ] [[-hn <host name> ] [[-di <device id> ] [-i | -u] | [-h]]"
+    scriptName=`basename "$0"`
+
+    echo "Utility script for installing and uninstalling the agent."
+    echo ""
+    echo "Usage:"
+    echo "  $scriptName -i -aui <Device | SecurityModule> -aum <authentication method> -f <file path> -hn <host name> -di <device id>"
+    echo "  $scriptName -u"
+    echo "  $scriptName -h"
+    echo ""
+    echo "Options:"
+    echo " -i   --install                    Install the agent."
+    echo " -u   --uninstall                  Uninstall the agent."
+    echo " -h   --help                       Show this screen."
+    echo " -aui --authentication-identity    The authentication identity used by the agent (SecurityModule or Device)."
+    echo " -aum --authentication-method      The authentication method used by the agent (SymmetricKey or SelfSignedCertificate)."
+    echo " -f   --file-path                  Path to a file from which data related to the authentication method should be read (the key or certificate)."
+    echo " -hn  --host-name                  IoT hub's host name."
+    echo " -di  --device-id                  Id of the device the agent is beind installed on (as defined in the IoT hub)."
 }
 
 wgetAndExitOnFail(){
@@ -57,7 +74,7 @@ installagent()
 {
     #install dependencies
     echo installing agent dependencies
-    apt-get install -y auditd
+    apt-get install -y auditd uuid-runtime libcurl4-openssl-dev
     apt-get install -y uuid-runtime
     
     echo installing agent
@@ -114,6 +131,47 @@ installagent()
     echo agent installation finished
 }
 
+validate_installation_params()
+{
+    shouldExit=false
+    
+    if [ -z "$_authenticationMethod" ]
+    then
+		echo "authentication-method not provided"
+        shouldExit=true
+    fi
+	
+	if [ -z "$_filePath" ]
+	then 
+		echo "file-path not provided"
+        shouldExit=true
+	fi
+
+	if [ -z "$_identity" ]
+    then
+		echo "authentication-identity not provided"
+        shouldExit=true
+	else
+		if [ -z "$_hostName" ]
+		then 
+			echo "host-name not provided"
+			shouldExit=true
+		fi
+
+		if [ -z "$_deviceId" ]
+		then 
+			echo "device-id not provided"
+			shouldExit=true
+		fi
+	fi
+
+    if $shouldExit
+    then 
+        echo "cannot intall the agent, please check the validity of the supplied parameters"
+        exit 1
+    fi
+}
+
 #parse command line arguments
 
 while [ "$1" != "" ]; do
@@ -136,20 +194,18 @@ while [ "$1" != "" ]; do
                 exit 1
             fi	
                                     ;;
-        -f | --file-path )  shift
+        -f | --file-path )          shift
                                     _filePath=$1
                                     ;;
-		-hn | --host-name )  shift
+		-hn | --host-name )         shift
 									_hostName=$1
 									;;
-		-di | --device-id)  shift
+		-di | --device-id)          shift
 									_deviceId=$1
 									;;
-        -u | --uninstall )          shift
-                                    _mode="uninstall"
+        -u | --uninstall )          _mode="uninstall"
                                     ;;
-        -i | --install )            shift
-                                    _mode="install"
+        -i | --install )            _mode="install"
                                     ;;
         -h | --help )               usage
                                     exit
@@ -167,6 +223,7 @@ _authenticationMethod=${_authenticationMethod/SymmetricKey/SasToken}
 if [[ $_mode == "uninstall" ]]; then
     uninstallagent
 elif [[ $_mode == "install" ]]; then
+    validate_installation_params
     installagent
 else
     usage

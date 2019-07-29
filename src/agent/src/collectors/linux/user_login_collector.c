@@ -111,7 +111,7 @@ EventCollectorResult UserLoginEvent_GeneratePayload(AuditSearch* auditSearch, Js
         return result;
     }
 
-    result = GenericAuditEvent_HandleIntValue(userLoginEventPayload, auditSearch, AUDIT_USER_LOGIN_USER_ID, USER_LOGIN_USER_ID_KEY, true);
+    result = GenericAuditEvent_HandleStringValue(userLoginEventPayload, auditSearch, AUDIT_USER_LOGIN_USER_ID, USER_LOGIN_USER_ID_KEY, true);
     if (result != EVENT_COLLECTOR_OK) {
         return result;
     }

@@ -4,7 +4,9 @@
 #include "consts.h"
 #include "internal/time_utils_consts.h"
 
-const char AGENT_VERSION[] = "0.0.3";
+const char AGENT_NAME[] = "ASCIoTAgent";
+
+const char AGENT_VERSION[] = "0.0.4";
 
 const char DEFAULT_MESSAGE_SCHEMA_VERSION[] = "1.0";
 

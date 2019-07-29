@@ -27,4 +27,9 @@ MOCKABLE_FUNCTION(, EventCollectorResult, ProcessCreationCollector_GetEvents, Sy
  */
 MOCKABLE_FUNCTION(, EventCollectorResult, ProcessCreationCollector_Init);
 
+/**
+ * @brief deinitializes the process event collector
+ */
+MOCKABLE_FUNCTION(, void, ProcessCreationCollector_Deinit);
+
 #endif //PROCESS_CEATION_COLLECTOR_H

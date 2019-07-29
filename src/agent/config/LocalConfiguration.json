@@ -2,12 +2,22 @@
     "Configuration" : {
         "AgentId" : "",
         "TriggerdEventsInterval" : "PT2M",
+        "ConnectionTimeout" : "PT30S",
+        "RemoteConfigurationObjectName" : "ms_iotn:urn_azureiot_Security_SecurityAgentConfiguration",
         "Authentication" : {
             "Identity" : "",
             "AuthenticationMethod" : "",
             "FilePath" : "",
             "DeviceId" : "",
-            "HostName" : ""
+            "HostName" : "",
+            "DPS" : {
+                "IDScope" : "",
+                "RegistrationId" : ""
+            }
+        },
+        "Logging": {
+            "SystemLoggerMinimumSeverity": 0,
+            "DiagnoticEventMinimumSeverity": 2
         }
     }
 }

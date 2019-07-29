@@ -4,11 +4,13 @@ programname=$0
 script_dir=$(cd "$(dirname "$0")" && pwd)
 build_root=$(cd "${script_dir}/.." && pwd)
 build_folder=$build_root"/cmake/agent_linux"
-build_debug=" "
+build_debug=" -DCMAKE_BUILD_TYPE=Release "
 unit_tests=" "
 int_tests=" "
 valgrind=" "
 make_args=" "
+protocol=" "
+disable_sdk_logs=" "
 
 print_usage() {
     echo "usage: $programname [--debug] [--unit-tests] [--int-tests] [--valgrind] [--make-args <make arguments>]"
@@ -17,6 +19,8 @@ print_usage() {
     echo "  --int-tests       compile integration tests"
     echo "  --valgrind        compile unit tests with valgrind"
     echo "  --make-args       specify arguments for make"
+    echo "  --protocol        specify protocol AMQP or MQTT"
+    echo "  --disable-sdk-logs  disable iothub sdk builtin logs"
     echo "example: $programname --debug --unit-tests --make-args -j4"
     exit 1
 }
@@ -28,7 +32,15 @@ parse_args() {
       --unit-tests)   unit_tests=" -Drun_unittests:BOOL=ON "    ;;
       --int-tests)    int_tests=" -Drun_int_tests:BOOL=ON "    ;;
       --valgrind)     valgrind=" -Drun_valgrind:BOOL=ON "       ;;
-      *)              print_usage                               ;;
+      --disable-sdk-logs) disable_sdk_logs=" -Dno_logging=ON" ;;
+      --protocol)     shift; 
+                      if [ $1 = "AMQP" ] || [ $1 = "MQTT" ]; then
+                        protocol=" -Dprotocol=$1"                
+                      else
+                        print_usage
+                        exit 1
+                      fi;;
+      *)              print_usage                                       ;;
     esac
     shift
   done
@@ -47,7 +59,7 @@ rm -rf $build_folder
 mkdir -p $build_folder
 pushd $build_folder
 
-cmake $build_debug $unit_tests $int_tests $valgrind $build_root
+cmake $build_debug $unit_tests $int_tests $valgrind $build_root $protocol $disable_sdk_logs
 cmake_result=$? 
 if [[ $cmake_result -ne 0 ]]; then
   echo "cmake failed"

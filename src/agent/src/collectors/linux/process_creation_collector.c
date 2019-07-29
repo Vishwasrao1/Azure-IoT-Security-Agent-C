@@ -3,10 +3,11 @@
 
 #include "collectors/process_creation_collector.h"
 
+#include <libaudit.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <libaudit.h>
 
+#include "collectors/event_aggregator.h"
 #include "collectors/generic_event.h"
 #include "collectors/linux/generic_audit_event.h"
 #include "json/json_array_writer.h"
@@ -14,8 +15,9 @@
 #include "logger.h"
 #include "message_schema_consts.h"
 #include "os_utils/linux/audit/audit_control.h"
-#include "os_utils/linux/audit/audit_search.h"
 #include "os_utils/linux/audit/audit_search_record.h"
+#include "os_utils/linux/audit/audit_search.h"
+#include "twin_configuration_defs.h"
 #include "utils.h"
 
 static const char AUDIT_PROCESS_CREATION_TYPE[] = "EXECVE";
@@ -28,6 +30,8 @@ static const int AUDIT_EXECVE_RECORD_TYPE = 1309; //FIXME: we need to see that i
 static const char AUDIT_ARGC[] = "argc";
 
 #define AUDIT_MAX_PARAM_LEN 10
+static EventAggregatorHandle aggregator = NULL;
+static bool aggregatorInitialized = false;
 
 /**
  * @brief Resda the command line from the audit event and write it to the payload.
@@ -59,6 +63,16 @@ EventCollectorResult ProcessCreationCollector_GeneratePayload(AuditSearch* audit
  */
 EventCollectorResult ProcessCreationCollector_CreateSingleEvent(AuditSearch* auditSearch, SyncQueue* queue);
 
+/**
+ * @brief Creates an event ready for aggregation 
+ * 
+ * @param   auditSearch         The search audit.
+ * @param   aggregator          Handle to event aggregator
+ * 
+ * @return EVENT_COLLECTOR_OK on success.
+ */
+EventCollectorResult ProcessCreationCollector_CreateEventForAgrregation(AuditSearch* auditSearch, EventAggregatorHandle aggregator);
+
 EventCollectorResult ProcessCreationCollector_GetEvents(SyncQueue* queue) {
     EventCollectorResult result = EVENT_COLLECTOR_OK;
     bool auditSearchInitialize = false;
@@ -73,8 +87,18 @@ EventCollectorResult ProcessCreationCollector_GetEvents(SyncQueue* queue) {
  
     AuditSearchResultValues hasNextResult = AuditSearch_GetNext(&auditSearch);
 
+    bool aggregaionEnabled = false;
+    if (aggregatorInitialized == true && EventAggregator_IsAggregationEnabled(aggregator, &aggregaionEnabled) != EVENT_AGGREGATOR_OK) {
+        Logger_Error("Couldn't fetch IsAggregationEnabled for event aggregator");
+    }
+
     while (hasNextResult == AUDIT_SEARCH_HAS_MORE_DATA) {
-        result = ProcessCreationCollector_CreateSingleEvent(&auditSearch, queue);
+        if (aggregaionEnabled == true) {
+            result = ProcessCreationCollector_CreateEventForAgrregation(&auditSearch, aggregator);
+        } else {
+            result = ProcessCreationCollector_CreateSingleEvent(&auditSearch, queue);
+        }
+        
         if (result == EVENT_COLLECTOR_RECORD_HAS_ERRORS) {
             ++recordsWithError;
             result = EVENT_COLLECTOR_OK;
@@ -83,12 +107,18 @@ EventCollectorResult ProcessCreationCollector_GetEvents(SyncQueue* queue) {
         } else if (result != EVENT_COLLECTOR_OK) {
             goto cleanup;
         }
+        
         hasNextResult = AuditSearch_GetNext(&auditSearch);
     }
 
     if (hasNextResult != AUDIT_SEARCH_NO_MORE_DATA) {
         result = EVENT_COLLECTOR_EXCEPTION;
         goto cleanup;    
+    }
+
+    if (aggregatorInitialized == true && EventAggregator_GetAggregatedEvents(aggregator, queue) != EVENT_AGGREGATOR_OK) {
+        result = EVENT_COLLECTOR_EXCEPTION;
+        goto cleanup; 
     }
    
 cleanup:
@@ -125,7 +155,7 @@ EventCollectorResult ProcessCreationCollector_GeneratePayload(AuditSearch* audit
         return result;
     }
 
-    result = GenericAuditEvent_HandleIntValue(processEventPayload, auditSearch, AUDIT_PROCESS_CREATION_USER_ID, PROCESS_CREATION_USER_ID_KEY, false);
+    result = GenericAuditEvent_HandleStringValue(processEventPayload, auditSearch, AUDIT_PROCESS_CREATION_USER_ID, PROCESS_CREATION_USER_ID_KEY, false);
     if (result != EVENT_COLLECTOR_OK) {
         return result;
     }    
@@ -141,6 +171,43 @@ EventCollectorResult ProcessCreationCollector_GeneratePayload(AuditSearch* audit
     }
 
     return EVENT_COLLECTOR_OK;
+}
+
+EventCollectorResult ProcessCreationCollector_CreateEventForAgrregation(AuditSearch* auditSearch, EventAggregatorHandle aggregator) {
+    EventCollectorResult result = EVENT_COLLECTOR_OK;
+    JsonObjectWriterHandle processEventPayload = NULL;
+    
+    if (JsonObjectWriter_Init(&processEventPayload) != JSON_WRITER_OK) {
+        result = EVENT_COLLECTOR_EXCEPTION;
+        goto cleanup;
+    }
+
+    result = ProcessCreationCollector_GeneratePayload(auditSearch, processEventPayload);
+    if (result != EVENT_COLLECTOR_OK) {
+        goto cleanup;
+    }
+
+    if (JsonObjectWriter_WriteInt(processEventPayload, PROCESS_CREATION_PROCESS_ID_KEY, 0) != JSON_WRITER_OK) {
+        result = EVENT_COLLECTOR_EXCEPTION;
+        goto cleanup;
+    }
+
+    if (JsonObjectWriter_WriteInt(processEventPayload, PROCESS_CREATION_PARENT_PROCESS_ID_KEY, 0) != JSON_WRITER_OK) {
+        result = EVENT_COLLECTOR_EXCEPTION;
+        goto cleanup;
+    }
+
+    if (EventAggregator_AggregateEvent(aggregator, processEventPayload) != EVENT_AGGREGATOR_OK) {
+        result = EVENT_COLLECTOR_EXCEPTION;
+        goto cleanup;
+    }
+cleanup:
+
+    if (processEventPayload != NULL) {
+        JsonObjectWriter_Deinit(processEventPayload);
+    }
+
+    return result;
 }
 
 EventCollectorResult ProcessCreationCollector_CreateSingleEvent(AuditSearch* auditSearch, SyncQueue* queue) {
@@ -309,10 +376,29 @@ EventCollectorResult ProcessCreationCollector_Init() {
         Logger_Error("Could not set audit to collect execve for b32.");
     }
 
+    EventAggregatorConfiguration aggregatorConfiguration;
+    aggregatorConfiguration.event_name = PROCESS_CREATION_NAME;
+    aggregatorConfiguration.event_type = EVENT_TYPE_SECURITY_VALUE;
+    aggregatorConfiguration.iotEventType = EVENT_TYPE_PROCESS_CREATE;
+    aggregatorConfiguration.payload_schema_version = PROCESS_CREATION_PAYLOAD_SCHEMA_VERSION;
+    
+    if (EventAggregator_Init(&aggregator, &aggregatorConfiguration) != EVENT_AGGREGATOR_OK) {
+        Logger_Error("Could not set initiate event aggregator");
+    }
+
+    aggregatorInitialized = true;
+
 cleanup:
     if (auditInitiated) {
         AuditControl_Deinit(&audit);
     }
 
     return result;
+}
+
+void ProcessCreationCollector_Deinit() {
+    if (aggregatorInitialized) {
+        EventAggregator_Deinit(aggregator);
+        aggregator = NULL;
+    }
 }

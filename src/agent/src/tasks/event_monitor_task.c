@@ -21,7 +21,7 @@
 #include "internal/time_utils.h"
 #include "local_config.h"
 #include "logger.h"
-#include "twin_configuration_event_priorities.h"
+#include "twin_configuration_event_collectors.h"
 #include "twin_configuration.h"
 
 /**
@@ -51,7 +51,7 @@ static bool EventMonitorTask_MonitorTriggeredEvents(EventMonitorTask* task);
  *
  * @return true on success, false otherwise.
  */
-static bool EventMonitorTask_MonitorSingleEvents(EventMonitorTask* task, TwinConfiguartionEventType eventType, EventCollectorFunc collectFunction);
+static bool EventMonitorTask_MonitorSingleEvents(EventMonitorTask* task, TwinConfigurationEventType eventType, EventCollectorFunc collectFunction);
 
 /**
  * @brief Initializes the collecots.
@@ -59,6 +59,12 @@ static bool EventMonitorTask_MonitorSingleEvents(EventMonitorTask* task, TwinCon
  * @return true on success, false otherwise.
  */
 static bool EventMonitorTask_InitCollectors();
+
+/**
+ * @brief deinitializes the collecots.
+ */
+static void EventMonitorTask_DeinitCollectors();
+
 
 bool EventMonitorTask_Init(EventMonitorTask* task, SyncQueue* highPriorityQueue, SyncQueue* lowPriorityQueue, SyncQueue* operationalEventsQueue) {
     task->operationalEventsQueue = operationalEventsQueue;
@@ -73,6 +79,8 @@ bool EventMonitorTask_Init(EventMonitorTask* task, SyncQueue* highPriorityQueue,
 void EventMonitorTask_Deinit(EventMonitorTask* task) {
     task->highPriorityQueue = NULL;
     task->lowPriorityQueue = NULL;
+
+    EventMonitorTask_DeinitCollectors();
 }
 
 void EventMonitorTask_Execute(EventMonitorTask* task) {
@@ -166,10 +174,10 @@ static bool EventMonitorTask_MonitorTriggeredEvents(EventMonitorTask* task) {
     return true;
 }
 
-static bool EventMonitorTask_MonitorSingleEvents(EventMonitorTask* task, TwinConfiguartionEventType eventType, EventCollectorFunc collectFunction) {
-    TwinConfiguartionEventPriority priority = 0;
+static bool EventMonitorTask_MonitorSingleEvents(EventMonitorTask* task, TwinConfigurationEventType eventType, EventCollectorFunc collectFunction) {
+    TwinConfigurationEventPriority priority = 0;
 
-    if (TwinConfigurationEventPriorities_GetPriority(eventType, &priority) != TWIN_OK) {
+    if (TwinConfigurationEventCollectors_GetPriority(eventType, &priority) != TWIN_OK) {
         return false;
     }
 
@@ -200,4 +208,9 @@ bool EventMonitorTask_InitCollectors() {
     }
 
     return true;
+}
+
+void EventMonitorTask_DeinitCollectors() {
+    ProcessCreationCollector_Deinit();
+    ConnectionCreationEventCollector_Deinit();
 }

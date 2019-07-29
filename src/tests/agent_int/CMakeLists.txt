@@ -43,13 +43,14 @@ set(${theseTestsName}_c_files
     ../../agent/src/tasks/event_publisher_task.c
     ../../agent/src/tasks/update_twin_task.c
     ../../agent/src/twin_configuration_consts.c
-    ../../agent/src/twin_configuration_event_priorities.c
+    ../../agent/src/twin_configuration_event_collectors.c
     ../../agent/src/twin_configuration.c
+    ../../agent/src/twin_configuration_utils.c
     ../../agent/src/utils.c
-
     ../../agent/src/os_utils/linux/correlation_manager.c
     ../../agent/src/os_utils/linux/file_utils.c
     ../../agent/src/os_utils/linux/os_utils.c
+    ../../agent/src/os_utils/linux/system_logger.c
 )
 
 set(${theseTestsName}_h_files
@@ -78,8 +79,9 @@ set(${theseTestsName}_h_files
     ../../agent/inc/tasks/update_twin_task.h
     ../../agent/inc/twin_configuration_consts.h
     ../../agent/inc/twin_configuration_defs.h
-    ../../agent/inc/twin_configuration_event_priorities.h
+    ../../agent/inc/twin_configuration_event_collectors.h
     ../../agent/inc/twin_configuration.h
+    ../../agent/inc/twin_configuration_utils.h
     ../../agent/inc/utils.h
 
     ../../agent/inc/os_utils/correlation_manager.h

@@ -102,4 +102,25 @@ MOCKABLE_FUNCTION(, JsonWriterResult, JsonObjectWriter_Serialize, JsonObjectWrit
  * @return JSON_WRITER_OK on success, an indicative error in failure.
  */
 MOCKABLE_FUNCTION(, JsonWriterResult, JsonObjectWriter_WriteObject, JsonObjectWriterHandle, writer, const char*, key, JsonObjectWriterHandle, object);
+
+/**
+ * @brief Creates a newly allocated copy of the given object
+ * 
+ * @param   dst     Destination object
+ * @param   key     The key to add.
+ * 
+ * @return JSON_WRITER_OK on success, an indicative error in failure.
+ */
+MOCKABLE_FUNCTION(, JsonWriterResult, JsonObjectWriter_Copy, JsonObjectWriterHandle*, dst, JsonObjectWriterHandle, src);
+
+/**
+ * @brief Compares two json objects
+ * 
+ * @param   a            first object
+ * @param   b            second object
+ * 
+ * @return true if object are equal, else false
+ */
+MOCKABLE_FUNCTION(, bool, JsonObjectWriter_Compare, JsonObjectWriterHandle, a, JsonObjectWriterHandle, b);
+
 #endif //JSON_OBJECT_WRITER_H

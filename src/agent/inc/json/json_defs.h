@@ -15,6 +15,7 @@ typedef struct JsonArrayWriter* JsonArrayWriterHandle;
 typedef enum _JsonReaderResult {
     JSON_READER_OK,
     JSON_READER_KEY_MISSING,
+    JSON_READER_VALUE_IS_NULL,
     JSON_READER_PARSE_ERROR,
     JSON_READER_EXCEPTION
 } JsonReaderResult;

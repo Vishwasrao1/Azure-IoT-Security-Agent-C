@@ -13,8 +13,13 @@ set(${theseTestsName}_test_files
 )
 
 set(${theseTestsName}_c_files
+    ../../agent/src/agent_errors.c
     ../../agent/src/authentication_manager.c
     ../../agent/src/consts.c
+)
+
+set(${theseTestsName}_h_files
+    ../../agent/inc/agent_errors.h
 )
 
 umockc_build_test_artifacts(${theseTestsName} ON)

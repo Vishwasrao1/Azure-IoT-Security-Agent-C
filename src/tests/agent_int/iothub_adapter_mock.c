@@ -53,3 +53,7 @@ bool IoTHubAdapter_SendMessageAsync(IoTHubAdapter* iotHubAdapter, const void* da
 
     return true;
 }
+
+bool IoTHubAdapter_SetReportedPropertiesAsync(IoTHubAdapter* iotHubAdapter, const void* reportedData, size_t dataSize) {
+    return true;
+}

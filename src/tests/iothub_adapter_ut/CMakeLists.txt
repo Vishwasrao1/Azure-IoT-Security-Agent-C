@@ -7,7 +7,7 @@ include("../../cmake_config/utilityFunctions.cmake")
 
 include_directories(../../agent/inc)
 include_directories(../../${AZUREIOT_INC_FOLDER})
-add_definitions(-DDISABLE_LOGS)
+add_definitions(-DDISABLE_LOGS -DUSE_AMQP -UUSE_MQTT)
 
 set(theseTestsName iothub_adapter_ut)
 
@@ -16,9 +16,11 @@ set(${theseTestsName}_test_files
 )
 
 set(${theseTestsName}_c_files
+    ../../agent/src/agent_errors.c
     ../../agent/src/consts.c
     ../../agent/src/iothub_adapter.c
     ../../agent/src/message_schema_consts.c
+    ../../agent/src/tasks/update_twin_task.c
 )
 
 umockc_build_test_artifacts(${theseTestsName} ON)

@@ -10,15 +10,9 @@
 #include "umock_c_prod.h"
 
 #include "synchronized_queue.h"
+#include "logger_consts.h"
 #include "collectors/generic_event.h"
 
-typedef enum _Severity {
-    SEVERITY_DEBUG,
-    SEVERITY_INFORMATION,
-    SEVERITY_WARNING,
-    SEVERITY_ERROR,
-    SEVERITY_FATAL
-} Severity;
 
 typedef struct _DiagnosticEvent {
     char* message;

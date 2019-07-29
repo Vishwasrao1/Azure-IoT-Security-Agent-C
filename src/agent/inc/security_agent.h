@@ -56,6 +56,8 @@ typedef struct _SecurityAgent {
     IoTHubAdapter iothubAdapter;
     bool iothubAdapterInitiated;
 
+    bool loggerInitiated;
+    bool iothubInitiated;
     bool memoryMonitorInitiated;
     bool twinConfigurationInitiated;
     bool localConfigurationInitiated;

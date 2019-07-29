@@ -15,15 +15,15 @@
 #include "utils.h"
 
 /**
- * @brief Extract the given key from the json as string.
+ * @brief Extract the value of the given key with the given type from the json as JSONValue.
  * 
  * @param   reader  The json reader instance.
  * @param   key     The key to read.
- * @param   output  Out param. The string value of the field.
+ * @param   output  Out param. The value of the field.
  * 
  * @return JSON_READER_OK on success, an indicative error in failure.
  */
-static JsonReaderResult JsonObjectReader_ExtractString(JsonObjectReader* reader, const char* key, char** output);
+static JsonReaderResult JsonObjectReader_GetValueOfType(JsonObjectReader* reader, const char* key, JSON_Value_Type type, JSON_Value ** outObject);
 
 /**
  * @brief Initiates a new json reader on the given json.
@@ -57,11 +57,13 @@ void JsonObjectReader_Deinit(JsonObjectReaderHandle handle) {
 
 JsonReaderResult JsonObjectReader_StepIn(JsonObjectReaderHandle handle, const char* key) {
     JsonObjectReader* reader = (JsonObjectReader*)handle;
-    if (json_object_dothas_value_of_type(reader->rootObject, key, JSONObject) == 0) {
-        return JSON_READER_KEY_MISSING;
+    JSON_Value* val = NULL;
+    JsonReaderResult result = JsonObjectReader_GetValueOfType(reader, key, JSONObject, &val);
+    if (result != JSON_READER_OK) {
+        return result;
     }
 
-    JSON_Object* newRoot = json_object_get_object(reader->rootObject, key);
+    JSON_Object* newRoot = json_value_get_object(val);
     if (newRoot == NULL) {
         return JSON_READER_EXCEPTION;
     }
@@ -69,12 +71,27 @@ JsonReaderResult JsonObjectReader_StepIn(JsonObjectReaderHandle handle, const ch
     return JSON_READER_OK;
 }
 
-JsonReaderResult JsonObjectReader_ReadTimeInMilliseconds(JsonObjectReaderHandle handle, const char* key, uint32_t* output) {
-
+JsonReaderResult JsonObjectReader_StepOut(JsonObjectReaderHandle handle) {
     JsonObjectReader* reader = (JsonObjectReader*)handle;
-    
+    JSON_Value* value = json_object_get_wrapping_value(reader->rootObject);
+    if (value == NULL) {
+        return JSON_READER_EXCEPTION;
+    }
+    JSON_Value* parentValue = json_value_get_parent(value);
+    if (parentValue == NULL) {
+        return JSON_READER_EXCEPTION;
+    }
+    JSON_Object* newRoot = json_value_get_object(parentValue);
+    if (newRoot == NULL) {
+        return JSON_READER_EXCEPTION;
+    }
+    reader->rootObject = newRoot;
+    return JSON_READER_OK;
+}
+
+JsonReaderResult JsonObjectReader_ReadTimeInMilliseconds(JsonObjectReaderHandle handle, const char* key, uint32_t* output) { 
     char* timeValue = NULL;
-    JsonReaderResult result = JsonObjectReader_ExtractString(reader, key, &timeValue);
+    JsonReaderResult result = JsonObjectReader_ReadString(handle, key, &timeValue);
     if (result != JSON_READER_OK) {
         return result;
     }
@@ -88,33 +105,37 @@ JsonReaderResult JsonObjectReader_ReadTimeInMilliseconds(JsonObjectReaderHandle 
 
 JsonReaderResult JsonObjectReader_ReadInt(JsonObjectReaderHandle handle, const char* key, int32_t* output) {
     JsonObjectReader* reader = (JsonObjectReader*)handle;
-
-    char* intValue = NULL;
-    JsonReaderResult result = JsonObjectReader_ExtractString(reader, key, &intValue);
+    JSON_Value* value = NULL;
+    
+    JsonReaderResult result = JsonObjectReader_GetValueOfType(reader, key, JSONNumber, &value);
     if (result != JSON_READER_OK) {
         return result;
     }
 
-    if (!Utils_ConvertStringToInteger(intValue, 10, output)) {
-        return JSON_READER_PARSE_ERROR;
-    }
-
+    *output = json_value_get_number(value);
+ 
     return JSON_READER_OK;
 }
 
-JsonReaderResult JsonObjectReader_ReadString(JsonObjectReaderHandle handle, const char* key, char** output) {
+JsonReaderResult JsonObjectReader_ReadString(JsonObjectReaderHandle handle, const char* key, char ** output) {
     JsonObjectReader* reader = (JsonObjectReader*)handle;
-
-    JsonReaderResult result = JsonObjectReader_ExtractString(reader, key, output);
+    JSON_Value* value = NULL;
+    
+    JsonReaderResult result = JsonObjectReader_GetValueOfType(reader, key, JSONString, &value);
     if (result != JSON_READER_OK) {
         return result;
+    }
+
+    *output = (char*) json_value_get_string(value);
+    if (*output == NULL) {
+        return JSON_READER_EXCEPTION;
     }
 
     return JSON_READER_OK;
 }
 
-static JsonReaderResult JsonObjectReader_ExtractString(JsonObjectReader* reader, const char* key, char** output) {
-    if (json_object_dothas_value_of_type(reader->rootObject, key, JSONString) == 0) {
+static JsonReaderResult JsonObjectReader_GetValueOfType(JsonObjectReader* reader, const char* key, JSON_Value_Type type, JSON_Value ** outObject){
+    if (json_object_dothas_value(reader->rootObject, key) != true){
         return JSON_READER_KEY_MISSING;
     }
 
@@ -123,11 +144,16 @@ static JsonReaderResult JsonObjectReader_ExtractString(JsonObjectReader* reader,
         return JSON_READER_EXCEPTION;
     }
 
-    *output = (char*) json_value_get_string(value);
-    if (*output == NULL) {
+    JSON_Value_Type actualType = json_value_get_type(value);
+    if (actualType == JSONError) {
         return JSON_READER_EXCEPTION;
+    } else if (actualType == JSONNull) {
+        return JSON_READER_VALUE_IS_NULL;
+    } else if (actualType != type) {
+        return JSON_READER_PARSE_ERROR;
     }
 
+    *outObject = value;
     return JSON_READER_OK;
 }
 
@@ -194,5 +220,18 @@ JsonReaderResult JsonObjectReader_ReadObject(JsonObjectReaderHandle handle, cons
     newReader->rootObject = subObject;
     *output = (JsonObjectReaderHandle)newReader;
 
+    return JSON_READER_OK;
+}
+
+JsonReaderResult JsonObjectReader_ReadBool(JsonObjectReaderHandle handle, const char* key, bool* output) {
+    JsonObjectReader* reader = (JsonObjectReader*)handle;
+    JSON_Value* value = NULL;
+
+    JsonReaderResult result = JsonObjectReader_GetValueOfType(reader, key, JSONBoolean, &value);
+    if (result != JSON_READER_OK) {
+        return result;
+    }
+
+    *output = json_value_get_boolean(value);
     return JSON_READER_OK;
 }

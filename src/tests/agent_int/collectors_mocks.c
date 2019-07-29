@@ -89,3 +89,7 @@ EventCollectorResult ProcessCreationCollector_Init() {
 EventCollectorResult ConnectionCreationEventCollector_Init() {
     return EVENT_COLLECTOR_OK;
 }
+
+void ProcessCreationCollector_Deinit() { }
+
+void ConnectionCreationEventCollector_Deinit() { }

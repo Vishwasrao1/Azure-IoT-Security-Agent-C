@@ -9,11 +9,12 @@ const char* AGENT_VERSION_KEY = "AgentVersion";
 const char* AGENT_ID_KEY = "AgentId";
 const char* MESSAGE_SCHEMA_VERSION_KEY = "MessageSchemaVersion";
 const char* HUB_RESOURCE_ID_PROPERTY_KEY = "HubResourceId";
-
+const char* EXTRA_DETAILS_KEY = "ExtraDetails";
 
 const char* EVENT_CATEGORY_KEY = "Category";
 const char* EVENT_PERIODIC_CATEGORY = "Periodic";
 const char* EVENT_TRIGGERED_CATEGORY = "Triggered";
+const char* EVENT_AGGREGATED_CATEGORY = "Aggregated";
 const char* EVENT_IS_EMPTY_KEY = "IsEmpty";
 const char* EVENT_NAME_KEY = "Name";
 const char* EVENT_TYPE_KEY = "EventType";

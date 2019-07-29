@@ -54,6 +54,23 @@ MOCKABLE_FUNCTION(, bool, AuthenticationManager_Init);
 MOCKABLE_FUNCTION(, void, AuthenticationManager_Deinit);
 
 /**
+ * @brief   Retrieve the latest registered hub hostname from the DPS.
+ * 
+ * @return true on success, false otherwise.
+ */
+MOCKABLE_FUNCTION(, bool, AuthenticationManager_GetHostNameFromDPS);
+
+/**
+ * @brief   Sets the DPS details.
+ * 
+ * @param   idScope             the ID Scope.
+ * @param   registrationId      the registration id.
+ * 
+ * @return true on success, false otherwise.
+ */
+MOCKABLE_FUNCTION(, bool, AuthenticationManager_SetDPSDetails, const char*, idScope, const char*, registrationId);
+
+/**
  * @brief   generates a connection string according.
  * 
  * @param   sharedAccessKey         a shared access key.
@@ -65,5 +82,15 @@ MOCKABLE_FUNCTION(, void, AuthenticationManager_Deinit);
  * @return true on success, false otherwise.
  */
 MOCKABLE_FUNCTION(, bool, AuthenticationManager_GenerateConnectionStringFromSharedAccessKey, char*, sharedAccessKey, char*, connectionString, uint32_t*, connectionStringSize, char*, hostName, char*, deviceId);
+
+/**
+ * @brief   initializes authentication manager with the relative path to the device security module
+ * 
+ * @param   hostName    the hub name to connect
+ * @param   deviceId    the device to connect to
+ * 
+ * @return true on success, false otherwise.
+ */
+MOCKABLE_FUNCTION(, bool, AuthenticationManager_InitSharedProperties, char*, hostName, char*, deviceId);
 
 #endif //AUTHENTICATION_MANAGER_H

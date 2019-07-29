@@ -21,18 +21,13 @@
 
 static TEST_MUTEX_HANDLE test_serialize_mutex;
 static TEST_MUTEX_HANDLE g_dllByDll;
-DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
+ MU_DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
     char temp_str[256];
-    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s", ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
+    (void)snprintf(temp_str, sizeof(temp_str), "umock_c reported error :%s",  MU_ENUM_TO_STRING(UMOCK_C_ERROR_CODE, error_code));
     ASSERT_FAIL(temp_str);
-}
-
-bool Mocked_Utils_ConvertStringToInteger_SetOutputTo75842(const char* input, int base, int* output) {
-    *output = 75842;
-    return true;
 }
 
 void Real_Utils_TrimLastOccurance(char* string, char token) {
@@ -57,7 +52,7 @@ BEGIN_TEST_SUITE(json_object_reader_ut)
 
 TEST_SUITE_INITIALIZE(suite_init)
 {
-    TEST_INITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 
     test_serialize_mutex = TEST_MUTEX_CREATE();
     ASSERT_IS_NOT_NULL(test_serialize_mutex);
@@ -80,13 +75,12 @@ TEST_SUITE_CLEANUP(suite_cleanup)
 {
     umock_c_deinit();
     TEST_MUTEX_DESTROY(test_serialize_mutex);
-    TEST_DEINITIALIZE_MEMORY_DEBUG(g_dllByDll);
+     
 }
 
 TEST_FUNCTION_INITIALIZE(method_init)
 {
     umock_c_reset_all_calls();
-    REGISTER_GLOBAL_MOCK_HOOK(Utils_ConvertStringToInteger, NULL);
 }
 
 TEST_FUNCTION(JsonObjectReader_InitFromString_ExpectSuccess)
@@ -188,6 +182,37 @@ TEST_FUNCTION(JsonObjectReader_StepIn_KeyDoesNotExist_ExpectFailure)
     JsonObjectReader_Deinit(reader);
 }
 
+TEST_FUNCTION(JsonObjectReader_StepInAndOut_ExpectSuccess)
+{
+    JsonObjectReaderHandle reader = NULL;
+    JsonReaderResult result = JsonObjectReader_InitFromString(&reader, "{\"a\": {\"b\" : \"c\"}}");
+
+    ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
+    
+    result = JsonObjectReader_StepIn(reader, "a");
+    ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
+
+    result = JsonObjectReader_StepOut(reader);
+    ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
+
+    result = JsonObjectReader_StepIn(reader, "a");
+    ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
+
+    JsonObjectReader_Deinit(reader);
+}
+
+TEST_FUNCTION(JsonObjectReader_StepOut_NoParentObject_ExpectFailure)
+{
+    JsonObjectReaderHandle reader = NULL;
+    JsonReaderResult result = JsonObjectReader_InitFromString(&reader, "{\"a\": {\"b\" : \"c\"}}");
+
+    ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
+    
+    result = JsonObjectReader_StepOut(reader);
+    ASSERT_ARE_EQUAL(int, JSON_READER_EXCEPTION, result);
+
+    JsonObjectReader_Deinit(reader);
+}
 
 TEST_FUNCTION(JsonObjectReader_ReadTimeInMilliseconds_ExpectSuccess)
 {
@@ -231,12 +256,10 @@ TEST_FUNCTION(JsonObjectReader_ExtractFieldInteger_ExpectSuccess)
     JsonObjectReaderHandle reader = NULL;
     JsonReaderResult result = 0;
 
-    REGISTER_GLOBAL_MOCK_HOOK(Utils_ConvertStringToInteger, Mocked_Utils_ConvertStringToInteger_SetOutputTo75842);
 
     // valid json
-    result = JsonObjectReader_InitFromString(&reader, "{\"a\" : \"b\", \"integer\":\"75842\"}");
+    result = JsonObjectReader_InitFromString(&reader, "{\"a\" : \"b\", \"integer\":75842}");
     ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
-    STRICT_EXPECTED_CALL(Utils_ConvertStringToInteger("75842", 10, IGNORED_PTR_ARG));
     result = JsonObjectReader_ReadInt(reader, "integer", &integerField);
     ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
     ASSERT_ARE_EQUAL(uint32_t, 75842, integerField);
@@ -245,21 +268,18 @@ TEST_FUNCTION(JsonObjectReader_ExtractFieldInteger_ExpectSuccess)
     // invalid iteger
     result = JsonObjectReader_InitFromString(&reader, "{\"a\" : \"b\", \"integer\":\"abcd\"}");
     ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
-    STRICT_EXPECTED_CALL(Utils_ConvertStringToInteger("abcd", 10, IGNORED_PTR_ARG)).SetReturn(false);
     result = JsonObjectReader_ReadInt(reader, "integer", &integerField);
     ASSERT_ARE_EQUAL(int, JSON_READER_PARSE_ERROR, result);
     JsonObjectReader_Deinit(reader);
 
     // missing key
-    result = JsonObjectReader_InitFromString(&reader, "{\"a\" : \"b\", \"integer\":\"123\"}");
+    result = JsonObjectReader_InitFromString(&reader, "{\"a\" : \"b\", \"integer\":123}");
     ASSERT_ARE_EQUAL(int, JSON_READER_OK, result);
     result = JsonObjectReader_ReadInt(reader, "datetim", &integerField);
     ASSERT_ARE_EQUAL(int, JSON_READER_KEY_MISSING, result);
     JsonObjectReader_Deinit(reader);
 
     ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
-
-    REGISTER_GLOBAL_MOCK_HOOK(Utils_ConvertStringToInteger, NULL);
 }
 
 TEST_FUNCTION(JsonObjectReader_ExtractFieldString_ExpectSuccess)
