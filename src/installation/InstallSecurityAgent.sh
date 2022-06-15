@@ -76,13 +76,8 @@ uninstallagent()
 
 installagent()
 {
-    #install dependencies
-    echo installing agent dependencies
-    apt-get update -y && apt-get install -y \
-        auditd \
-        uuid-runtime \
-        libcurl4-openssl-dev
-
+    # Dependencies were already installed by yocto project
+    # Install agent directly
     echo installing agent
 
     #add the service user
